@@ -163,6 +163,28 @@ const Vec3u Interpolator<Vec3u>::getValue(float time) const {
 	}
 };
 
+template<>
+const VerticesList Interpolator<VerticesList>::getValue(float time) const {
+	if (values.size() == 0) return displayValue;
+	typename std::map<float, VerticesList>::const_iterator it = find_last_key(time);
+	if (time <= it->first) return it->second;
+	typename std::map<float, VerticesList>::const_iterator nextit = next(it);
+	if (nextit == values.end()) {
+		return it->second;
+	}
+	if (it != values.end()) {
+		VerticesList e = it->second;
+		VerticesList ne = nextit->second;
+		VerticesList res;
+		float f = (time - it->first) / (nextit->first - it->first);
+		for (int i = 0; i < std::min(e.size(), ne.size()); i++) {
+			res.vertices.push_back(e.vertices[i]*(1.f-f) + ne.vertices[i]*f);
+		}
+		res.contourList = e.contourList;
+		return res;
+	}
+};
+
 class Property {
 public:
 	virtual void CreateWidgets(float time) = 0;
@@ -376,8 +398,13 @@ public:
 
 		}
 	};
-	virtual void UpdateParameterFromWidget(float time) {
-		/// TODO ??
+	virtual void UpdateParameterFromWidget(float time) {		
+		for (int i = 0; i < propListVertices->GetItemCount(); i++) {
+			wxString s = propListVertices->GetItemText(i, 0);
+			float f1, f2;
+			sscanf(s.c_str(), "(%f, %f)", &f1, &f2);
+			vertices.displayValue.vertices[i] = Vec2f(f1, f2);
+		}		
 	}
 
 	//VerticesList eval(float time) const { return vertices.getValue(time); }
@@ -406,6 +433,9 @@ public:
 	}
 	void SetWidgetsNull() {
 		propListVertices = NULL;
+	}
+	virtual void UpdateInternalTime(float time) {
+		vertices.setDisplayValue(vertices.getValue(time));
 	}
 	Interpolator<VerticesList> vertices;
 	wxListCtrl* propListVertices;
