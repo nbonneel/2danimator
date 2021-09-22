@@ -90,6 +90,7 @@ public:
 		render(dc);
 	}
 	void paintEvent(wxPaintEvent& evt) {	
+		evt.Skip();
 		wxPaintDC dc(this);
 		render(dc);
 	}
@@ -105,9 +106,11 @@ public:
 	void addShape(wxCommandEvent& event);
 
 	void addMorphPolygon(wxCommandEvent& event) {
+		event.Skip();
 		addingMorph = true;
 	}
 	void OnAddVtxPopupClick(wxCommandEvent &evt) {
+		evt.Skip();
 		AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
 		PolygonShape* p = dynamic_cast<PolygonShape*>(curPanel->scene->currentShape);
 		Vec2f pos(curPanel->mouse_x, curPanel->mouse_y);
@@ -121,6 +124,7 @@ public:
 	}
 
 	void OnAddCtrlPointPopupClick(wxCommandEvent &evt) {
+		evt.Skip();
 		AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
 		Spline* p = dynamic_cast<Spline*>(curPanel->scene->currentShape);
 		Vec2f pos(curPanel->mouse_x, curPanel->mouse_y);
@@ -133,6 +137,7 @@ public:
 		moveCtrlId = id_prev + 1;
 	}
 	void OnMoveVtxPopupClick(wxCommandEvent &evt) {
+		evt.Skip();
 		AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
 		PolygonShape* p = dynamic_cast<PolygonShape*>(curPanel->scene->currentShape);
 		Vec2f pos(curPanel->mouse_x, curPanel->mouse_y);
@@ -143,6 +148,7 @@ public:
 		curPanel->moveVtxId = p->nearestVertex(pos, s, a, trans, 10, t);
 	}
 	void OnMoveCtrlPointPopupClick(wxCommandEvent &evt) {
+		evt.Skip();
 		AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
 		Spline* p = dynamic_cast<Spline*>(curPanel->scene->currentShape);
 		Vec2f pos(curPanel->mouse_x, curPanel->mouse_y);
@@ -232,7 +238,7 @@ public:
 
 	void render_animation(const char* filename);
 
-	void DestroySizer(const wxSizerItemList &toremove);
+	void DestroySizer(wxSizerItemList toremove);
 
 	bool render_loop_on;
 	AnimatorPanel* animatorPanel;

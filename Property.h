@@ -170,6 +170,7 @@ public:
 	virtual void UpdateParameterFromWidget(float time) = 0;
 	virtual void UpdateInternalTime(float time) {};
 	virtual void addKeyframe(float time) = 0;
+	virtual void SetWidgetsNull() = 0;
 };
 
 class PositionProperty : public Property {
@@ -239,6 +240,10 @@ public :
 	void setDisplayValue(const Vec2s &val) {
 		return position.setDisplayValue(val);
 	}
+	void SetWidgetsNull() {
+		propFloat1 = NULL;
+		propFloat2 = NULL;
+	}
 	Interpolator<Vec2s> position;
 	SpinRegex *propFloat1, *propFloat2;
 };
@@ -286,6 +291,9 @@ public:
 	void setDisplayValue(const Expr &val) { 
 		return value.setDisplayValue(val); 
 	}
+	void SetWidgetsNull() {
+		propFloat1 = NULL;
+	}
 
 	Interpolator<Expr> value;
 	SpinRegex *propFloat1;
@@ -299,6 +307,7 @@ public:
 	void setName(std::string propertyName) { this->propertyName = propertyName; }
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
+		if (!colorPicker) return;
 		Vec3u col = color.getDisplayValue();
 		colorPicker->SetColour(wxColour(col[0], col[1], col[2]));
 		if (color.hasKeyframe(time))
@@ -329,6 +338,10 @@ public:
 	virtual void UpdateInternalTime(float time) {
 		color.setDisplayValue(color.getValue(time));
 	}
+	void SetWidgetsNull() {
+		colorPicker = NULL;
+	}
+
 	Interpolator<Vec3u> color;
 	std::string propertyName;
 	ClickableColourPicker *colorPicker;
@@ -391,6 +404,9 @@ public:
 	void setDisplayValue(const VerticesList &val) {
 		return vertices.setDisplayValue(val);
 	}
+	void SetWidgetsNull() {
+		propListVertices = NULL;
+	}
 	Interpolator<VerticesList> vertices;
 	wxListCtrl* propListVertices;
 };
@@ -401,10 +417,12 @@ public:
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		bool v = visible.getValue(time);
-		propBool->SetValue(v);
+		if (propBool) 
+			propBool->SetValue(v);
 	}; 
 	virtual void UpdateParameterFromWidget(float time) {
-		visible.setValue(time, propBool->GetValue());
+		if (propBool)
+			visible.setValue(time, propBool->GetValue());
 	}
 	bool getDisplayValue() const {
 		return visible.getDisplayValue();
@@ -416,6 +434,9 @@ public:
 	}
 	bool eval(float time) const { return visible.getValue(time); }
 
+	void SetWidgetsNull() {
+		propBool = NULL;
+	}
 	Interpolator<bool> visible;
 	wxCheckBox* propBool;
 };

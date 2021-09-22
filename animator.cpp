@@ -153,8 +153,9 @@ void AnimatorPanel::update_time_values(wxCommandEvent& event) {
 		}
 
 	//updatePropertiesFromControls(event);
-	updateControlValues();
-	paintNow();
+	//updateControlValues();
+	//paintNow();
+	this->CallAfter(&AnimatorPanel::updateControlValues);
 }
 
 void AnimatorPanel::updatePropertiesFromControls(wxCommandEvent& event) {
@@ -166,6 +167,7 @@ void AnimatorPanel::updatePropertiesFromControls(wxCommandEvent& event) {
 };
 
 void AnimatorPanel::editedVertex(wxListEvent& event) {
+	event.Skip();
 	int itemIndex = event.GetIndex();
 	wxListCtrl *ctrl = (wxListCtrl*)event.GetEventObject();
 	wxListItem item = event.GetItem();
@@ -176,13 +178,15 @@ void AnimatorPanel::editedVertex(wxListEvent& event) {
 }
 
 void AnimatorPanel::updateControlValues() {
-	if (!scene->currentShape) return;
-	for (int i = 0; i < scene->currentShape->parameters.size(); i++) {
-		scene->currentShape->parameters[i]->UpdateWidgets(scene->currentTime);
+	if (!myApp->animatorPanel->scene->currentShape) return;
+	for (int i = 0; i < myApp->animatorPanel->scene->currentShape->parameters.size(); i++) {
+		myApp->animatorPanel->scene->currentShape->parameters[i]->UpdateWidgets(myApp->animatorPanel->scene->currentTime);
 	}
+	myApp->animatorPanel->paintNow();
 };
 
 void AnimatorPanel::OnChangePolygonToTextPopupClick(wxCommandEvent &evt) {
+	evt.Skip();
 	AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
 	PolygonShape* p = dynamic_cast<PolygonShape*>(curPanel->scene->currentShape);
 
@@ -194,6 +198,7 @@ void AnimatorPanel::OnChangePolygonToTextPopupClick(wxCommandEvent &evt) {
 }
 
 void AnimatorPanel::mouseMoved(wxMouseEvent& event) {
+	event.Skip();
 	mouse_x = event.m_x;
 	mouse_y = event.m_y;
 	animatorApp->infoBar->SetLabelText(std::to_string(mouse_x) + "," + std::to_string(mouse_y));
@@ -246,7 +251,7 @@ void AnimatorPanel::colourMouseUp(wxMouseEvent &evt) {
 		evt.Skip();
 		return;
 	}
-
+	evt.Skip();
 	if (evt.RightUp()) {
 		colorCtrlMenu.SetClientData(evt.GetEventObject());
 		PopupMenu(&colorCtrlMenu);
@@ -264,10 +269,12 @@ void AnimatorPanel::spinMouseUp(wxMouseEvent &evt) {
 	if (evt.RightUp()) {
 		spinCtrlMenu.SetClientData(evt.GetEventObject());
 		PopupMenu(&spinCtrlMenu);
+		evt.Skip();
 		return;
 	}
 	if (!dragging) {
 		dragging = false;
+		evt.Skip();
 		return;
 	}
 	dragging = false;
@@ -299,6 +306,7 @@ void AnimatorPanel::spinMouseUp(wxMouseEvent &evt) {
 	spline->SetPosition(scene->currentTime, myApp->animatorPanel->scene->oldPos);
 	myApp->animatorPanel->scene->currentShape = myApp->animatorPanel->scene->previousShape;
 	updateControlValues();
+	evt.Skip();
 	paintNow();
 }
 
@@ -346,11 +354,20 @@ wxControl* AnimatorApp::addObjectButton(const char* name, Shape* s, wxPanel* pan
 	return objectButton;
 }
 
-void AnimatorApp::DestroySizer(const wxSizerItemList &toremove) {
+void AnimatorApp::DestroySizer(wxSizerItemList toremove) {
 	//sizer->Clear(true);
 
 	for (int i = 0; i < toremove.size(); i++) {
-		toremove[i]->DeleteWindows();
+		wxSizerItem* item = toremove[i];
+		item->DeleteWindows();				
+	}
+	std::vector<Shape*> &shapes = myApp->animatorPanel->scene->shapes;
+	for (int i = 0; i < shapes.size(); i++) {
+		if (shapes[i] != myApp->animatorPanel->scene->currentShape) {
+			for (int j = 0; j < shapes[i]->parameters.size(); j++) {
+				shapes[i]->parameters[j]->SetWidgetsNull();
+			}
+		}
 	}
 	myApp->panelProperties_sizer->Layout();
 }
