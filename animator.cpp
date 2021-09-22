@@ -50,12 +50,15 @@ void AnimatorApp::render_animation(const char* filename) {
 	std::string sfilename(filename);
 	std::string ext = sfilename.substr(sfilename.find_last_of(".") + 1); // without '.'
 	std::string name = sfilename.substr(0, sfilename.find_last_of(".")); // without '.'
-	Canvas c(animatorPanel->cur_img.W, animatorPanel->cur_img.H);
+	Canvas c(myApp->animatorPanel->cur_img.W, myApp->animatorPanel->cur_img.H);
 	for (int i = 0; i < time_slider->GetMax(); i++) {
 		std::string s = name + std::to_string(i) + "." + ext;
 		float t = i / (float)time_slider->GetMax();
-		animatorPanel->scene->currentTime = t;
-		animatorPanel->scene->Draw(c, false);
+		myApp->animatorPanel->scene->currentTime = t;
+		myApp->time_slider->SetValue(t*100.);
+		wxCommandEvent null;
+		myApp->animatorPanel->update_time_values(null);
+		myApp->animatorPanel->scene->Draw(c, false);
 		c.saveToFile(s.c_str());
 	}
 }
@@ -141,9 +144,9 @@ void AnimatorPanel::addShape(wxCommandEvent& event) {
 	myApp->setupPanelProperties(scene->currentShape);
 };
 
-void AnimatorPanel::udate_time_values(wxCommandEvent& event) {
+void AnimatorPanel::update_time_values(wxCommandEvent& event) {
 
-	scene->currentTime = dynamic_cast<wxSlider*>(event.GetEventObject())->GetValue() / 100.;
+	scene->currentTime = myApp->time_slider->GetValue() / 100.;
 	for (int i = 0; i < scene->shapes.size(); i++)
 		for (int j = 0; j < scene->shapes[i]->parameters.size(); j++) {
 			scene->shapes[i]->parameters[j]->UpdateInternalTime(scene->currentTime);
@@ -415,7 +418,7 @@ bool AnimatorApp::OnInit() {
 	Connect(1100, wxEVT_BUTTON, wxCommandEventHandler(AnimatorPanel::addMorphPolygon), NULL, animatorPanel);
 	panelObject_sizer->Add(morphPolygonsButton, 0, wxEXPAND);
 	
-	Spline* defaultSpline = new Spline(Vec2s("0", "0"), "5", Vec3u(212, 61, 81));
+	Spline* defaultSpline = new Spline(Vec2s("0", "0"), "1", Vec3u(212, 61, 81), true, "5");
 	defaultSpline->addVertex(-1.f, Vec2f(150, 50));
 	defaultSpline->addVertex(-1.f, Vec2f(200, 90));
 	defaultSpline->addVertex(-1.f, Vec2f(200, 150));
@@ -443,7 +446,7 @@ bool AnimatorApp::OnInit() {
 	wxBoxSizer * time_sizer = new wxBoxSizer(wxHORIZONTAL);
 	wxStaticText* time_text = new wxStaticText(frame, 9999, "timeline ");
 	time_slider = new wxSlider(frame, 123, 0, 0, 100, wxDefaultPosition, wxSize(600, 32), wxSL_HORIZONTAL | wxSL_LABELS);
-	Connect(123, wxEVT_COMMAND_SLIDER_UPDATED, wxCommandEventHandler(AnimatorPanel::udate_time_values), NULL, animatorPanel);
+	Connect(123, wxEVT_COMMAND_SLIDER_UPDATED, wxCommandEventHandler(AnimatorPanel::update_time_values), NULL, animatorPanel);
 	time_sizer->Add(time_text, 0, wxEXPAND);
 	time_sizer->Add(time_slider, 1, wxEXPAND);
 	renderSuperSizer_sizer->Add(time_sizer, 5, wxEXPAND);

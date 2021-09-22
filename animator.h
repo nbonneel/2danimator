@@ -160,7 +160,7 @@ public:
 
 	void OnChangePolygonToTextPopupClick(wxCommandEvent &evt);
 
-	void udate_time_values(wxCommandEvent& event);
+	void update_time_values(wxCommandEvent& event);
 
 	void updatePropertiesFromControls(wxCommandEvent& event);
 
