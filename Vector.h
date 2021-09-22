@@ -4,6 +4,10 @@
 #define M_PI 3.1415926535897932
 #endif
 
+#include <vector>
+#include <map>
+#include <array>
+
 static inline std::string replace_variable(const std::string& s, float t) {
 	std::string newstring; newstring.reserve(s.size());
 	for (int j = 0; j < s.size(); j++) {
@@ -15,47 +19,50 @@ static inline std::string replace_variable(const std::string& s, float t) {
 	}
 	return newstring;
 }
+static inline float eval_string(const std::string& s, float t) {
+	std::string newstring = replace_variable(s, t);
+	return  ceval_result2(newstring);
+}
 template<typename T> T sqr(T x) {
 	return x * x;
 };
 
-class Keyable {
+/*class Keyable {
 public:
 	Keyable(void* firstParam = NULL, std::string name = "?") : firstParam(firstParam), name(name) {};
-	
+	virtual ~Keyable() = default;
 	//virtual template<typename T> T operator[](int i) const = 0;
 	//virtual template<typename T> T& operator[](int i) = 0;
 	std::string name, encodedTypes;
 	void* firstParam;
 };
-
+*/
 
 
 
 template<typename T, int DIM>
-class Vector : public Keyable {
+class Vector {
 public:
-	Vector():Keyable(&coords[0]) { };
-	Vector(T x) : Keyable(&coords[0]) {
+	Vector() { };
+	Vector(T x) {
 		for (int i = 0; i < DIM; i++) 
 			coords[i] = x; 
 	}
-	Vector(T x, T y) :Keyable(&coords[0]) {
+	Vector(T x, T y)  {
 		coords[0] = x; 
 		coords[1] = y; 
 	}
-	Vector(T x, T y, T z) :Keyable(&coords[0]) {
+	Vector(T x, T y, T z)  {
 		coords[0] = x; 
 		coords[1] = y; 
 		coords[2] = z; 
 	}
-	Vector(const Vector& v) :Keyable(&coords[0]) {
+	Vector(const Vector& v)  {
 		for (int i = 0; i < DIM; i++)
 			coords[i] = v[i];
 	}
 	T operator[](int i) const { return coords[i];}
 	T& operator[](int i) { return coords[i]; }
-
 
 //private:
 	T coords[DIM];
@@ -246,30 +253,65 @@ typedef  FastVector<float, 2> FastVec2f;
 typedef  Vector<unsigned char, 3> Vec3u;
 typedef  Vector<float, 1> Float;
 
-
 template<int DIM>
-class Vector<std::string, DIM> : public Keyable {
+class Vector<std::string, DIM> {
 public:
-	Vector() :Keyable(&coords[0]) {};
-	Vector(const std::string &x) : Keyable(&coords[0]) {
+	
+	std::string coords[DIM];
+
+	Vector()  {};
+	Vector(const std::string &x)  {
 		for (int i = 0; i < DIM; i++)
 			coords[i] = x;
 	}
-	Vector(const std::string &x, const std::string& y) :Keyable(&coords[0]) {
-		coords[0] = x;
-		coords[1] = y;
+	Vector(const std::string &x, const std::string& y)  {
+		coords[0] = x; coords[1] = y;
 	}
-	Vector(const std::string &x, const std::string &y, const std::string &z) :Keyable(&coords[0]) {
-		coords[0] = x;
-		coords[1] = y;
-		coords[2] = z;
+	Vector(const std::string &x, const std::string &y, const std::string &z) {
+		coords[0] = x; coords[1] = y; coords[2] = z;
 	}
-	Vector(const Vector& v) :Keyable(&coords[0]) {
-		for (int i = 0; i < DIM; i++)
-			coords[i] = v[i];
+	Vector(const Vector& v) {
+		for (int i=0; i<DIM; i++)
+			coords[i] = v.coords[i];
 	}
 	std::string operator[](int i) const { return coords[i]; }
 	std::string& operator[](int i) { return coords[i]; }
+
+	/*typename Vector::ConstIteratorType find_index(float t) const {
+		typename Vector::ConstIteratorType prev_it = coords.begin();
+		typename Vector::ConstIteratorType it = coords.begin(); ++it;
+		for (; it != coords.end(); ++it) {
+			if (it->first >= t - 0.00001) {
+				return prev_it;
+			}
+			prev_it = it;
+		}
+		return prev_it;
+	}
+
+	std::string getValue(int coord, float time) {
+		typename Vector::ConstIteratorType it = find_index(time);
+		return it->second[coord];
+	}
+
+	void setValue(int coord, float time, std::string val) {
+		typename Vector::IteratorType it = coords.find(time);
+		if (it != coords.end()) {
+			it->second[coord] = time;
+		} else {
+			std::array<std::string, DIM> values;
+			Vector<float, DIM> v = eval(time);
+			for (int i = 0; i < DIM; i++) {
+				if (i == coord) {
+					values[i] = val;
+				} else {
+					values[i] = std::to_string(v[i]);
+				}
+				
+			}
+			coords[time] = values;
+		}
+	}*/
 
 	Vector<float, DIM> eval(float t) const{
 		Vector<float, DIM> v;
@@ -281,11 +323,11 @@ public:
 	}
 
 	float eval1(float t) const {
-		std::string newstring = replace_variable(coords[0], t);
-		return  ceval_result2(newstring);
+		return eval_string(coords[0], t);
 	}
 
-		std::string coords[DIM];
+
+
 };
 
 typedef  Vector<std::string, 1> Expr;
@@ -309,27 +351,25 @@ static inline FastVec2f rotate(const FastVec2f& v, float angle) {
 	return res;
 }
 
-class VerticesList : public Keyable {
+class VerticesList  {
 public:
-	VerticesList() : Keyable(NULL) {};
-	VerticesList(const Vec2f& v1, const Vec2f& v2, const Vec2f& v3) : Keyable(NULL) {
+	VerticesList()  {};
+	VerticesList(const Vec2f& v1, const Vec2f& v2, const Vec2f& v3)  {
 		vertices.push_back(v1);
 		vertices.push_back(v2);
 		vertices.push_back(v3);
-		firstParam = &vertices[0];
 		contourList.push_back(2);
 	};
 	VerticesList(const VerticesList& v) {
 		vertices = v.vertices;
 		contourList = v.contourList;
-		firstParam = &vertices[0];
 	}
 	void Clear() {
 		vertices.clear();
 		contourList.clear();
-		firstParam = NULL;
 	}
-	void addVertex(const Vec2f& v, bool createNewContour = false) {
+	int size() const { return vertices.size(); };
+	VerticesList& addVertex(const Vec2f& v, bool createNewContour = false) {
 		vertices.push_back(v);
 		if (contourList.size() == 0 || createNewContour) {
 			if (contourList.size() != 0)
@@ -338,10 +378,9 @@ public:
 		} else {
 			contourList[contourList.size() - 1] = vertices.size() - 1;
 		}
-
-		firstParam = &vertices[0];
+		return *this;
 	}
-	void insertVertex(const Vec2f& v, int prevVtx) {
+	VerticesList& insertVertex(const Vec2f& v, int prevVtx) {
 		for (int i = 0; i < contourList.size(); i++) {
 			int start = 0;
 			if (i > 0) start = contourList[i - 1] + 1;
@@ -352,7 +391,7 @@ public:
 		}
 		vertices.insert(vertices.begin() + prevVtx+1, v);
 		// contourList ->>>> TODO
-		firstParam = &vertices[0];
+		return *this;
 	}
 	std::vector<Vec2f> vertices;
 	std::vector<int> contourList; // contours from 0 to contourList[0], then contourList[0]+1 to contourList[1] etc.

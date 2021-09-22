@@ -475,11 +475,11 @@ namespace lemon {
 
 					ArcsType e;
 					ArcsType j;
-#pragma omp parallel
+//#pragma omp parallel
 					{
 						int t = omp_get_thread_num();
 
-#pragma omp for schedule(static, bs) lastprivate(e)
+//#pragma omp for schedule(static, bs) lastprivate(e)
 						for (j = 0; j < std::min(i + _block_size, _search_arc_num) - i; j++) {
 							e = (_next_arc + i + j); if (e >= _search_arc_num) e -= _search_arc_num;
 							Cost c = _state[e] * (_cost[e] + _pi[_source[e]] - _pi[_target[e]]);
@@ -894,7 +894,7 @@ namespace lemon {
 				num_big_subsequences = _arc_num % mixingCoeff;
 				num_total_big_subsequence_numbers = subsequence_length * num_big_subsequences;
 
-#pragma omp parallel for schedule(static)
+//#pragma omp parallel for schedule(static)
 				for (Arc a = 0; a <= _graph.maxArcId(); a++) {   // --a <=> _graph.next(a)  , -1 == INVALID 
 					ArcsType i = sequence(_graph.maxArcId()-a);
 					_source[i] = _node_id(_graph.source(a));
@@ -1448,7 +1448,7 @@ namespace lemon {
 				} else {
 					arc_vector.resize(demand_nodes.size());
 					// Find the min. cost incomming arc for each demand node
-#pragma omp parallel for
+//#pragma omp parallel for
 					for (ArcsType i = 0; i < ArcsType(demand_nodes.size()); ++i) {
 						Node v = demand_nodes[i];
 						Cost min_cost = std::numeric_limits<Cost>::max();
@@ -1468,7 +1468,7 @@ namespace lemon {
 			} else {
 				arc_vector.resize(supply_nodes.size());
 				// Find the min. cost outgoing arc for each supply node
-#pragma omp parallel for
+//#pragma omp parallel for
 				for (int i = 0; i < int(supply_nodes.size()); ++i) {
 					Node u = supply_nodes[i];
 					Cost min_cost = std::numeric_limits<Cost>::max();

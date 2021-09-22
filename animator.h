@@ -51,7 +51,7 @@ public:
 
 		addingMorph = false;
 		left_mouse_down = false;
-		wasDragging = false;
+		dragging = false;
 		needPanelUpdate = false;
 		moveVtxId = -1;
 		moveCtrlId = -1;
@@ -64,6 +64,9 @@ public:
 
 		splineMenu.Append(55, "Add Control Point Here");
 		splineMenu.Append(56, "Move Control Point");
+
+		spinCtrlMenu.Append(57, "Add Keyframe");
+		colorCtrlMenu.Append(58, "Add Keyframe");
 		
 
 		//polygonMenu.Connect(wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddVtxPopupClick), this, this);
@@ -75,6 +78,9 @@ public:
 		Connect(55, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddCtrlPointPopupClick), this, this);
 		Connect(56, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnMoveCtrlPointPopupClick), this, this);
 
+		Connect(57, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddKeyframePointPopupClick), this, this);
+		Connect(58, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddColorKeyframePointPopupClick), this, this);
+		
 		//s.Add(new Disk(Vec2f(0, 0), 20, Vec3u(0, 0, 255)));
 		start_display_thread();
 	}
@@ -96,14 +102,8 @@ public:
 		//compute_thread2 = std::thread(doDisplay, (void*)this);
 	}
 
-	void addShape(wxCommandEvent& event) {
-		AddObjectParam* param = (AddObjectParam*) event.GetEventUserData();
-		Shape* s = param->shapeType->Clone();
-		PolygonShape* p = dynamic_cast<PolygonShape*>(s);
-		/*if (p)
-			p->setText("Liris");*/
-		param->scene->Add(s);
-	};
+	void addShape(wxCommandEvent& event);
+
 	void addMorphPolygon(wxCommandEvent& event) {
 		addingMorph = true;
 	}
@@ -113,10 +113,10 @@ public:
 		Vec2f pos(curPanel->mouse_x, curPanel->mouse_y);
 		float t = curPanel->scene->currentTime;
 		float s = p->GetScale(t);
-		float a = p->angle.eval1(t);
+		float a = p->angle.getDisplayValue(t);
 		Vec2f trans = p->GetPosition(t);
-		int id_prev = p->nearestSegment(pos, s, a, trans);		
-		p->insertVertex(rotate((pos - trans) / s, -a) , id_prev);
+		int id_prev = p->nearestSegment(pos, s, a, trans, t);		
+		p->insertVertex(t, rotate((pos - trans) / s, -a) , id_prev);
 		moveVtxId = id_prev + 1;
 	}
 
@@ -128,8 +128,8 @@ public:
 		float s = p->GetScale(t);
 		//float a = p->angle.eval1(t);
 		Vec2f trans = p->GetPosition(t);
-		int id_prev = p->nearestSegment(pos, s, 0., trans);
-		p->insertControlPoint(rotate((pos - trans) / s, -0), id_prev);
+		int id_prev = p->nearestSegment(pos, s, 0., trans, t);
+		p->insertControlPoint(t, rotate((pos - trans) / s, -0), id_prev);
 		moveCtrlId = id_prev + 1;
 	}
 	void OnMoveVtxPopupClick(wxCommandEvent &evt) {
@@ -138,9 +138,9 @@ public:
 		Vec2f pos(curPanel->mouse_x, curPanel->mouse_y);
 		float t = curPanel->scene->currentTime;
 		float s = p->GetScale(t);
-		float a = p->angle.eval1(t);
+		float a = p->angle.getDisplayValue(t);
 		Vec2f trans = p->GetPosition(t);
-		curPanel->moveVtxId = p->nearestVertex(pos, s, a, trans, 10);
+		curPanel->moveVtxId = p->nearestVertex(pos, s, a, trans, 10, t);
 	}
 	void OnMoveCtrlPointPopupClick(wxCommandEvent &evt) {
 		AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
@@ -150,9 +150,11 @@ public:
 		float s = p->GetScale(t);
 		//float a = p->angle.eval1(t);
 		Vec2f trans = p->GetPosition(t);
-		curPanel->moveCtrlId = p->nearestControlPoint(pos, s, 0, trans, 10);
+		curPanel->moveCtrlId = p->nearestControlPoint(pos, s, 0, trans, 10, t);
 	}
-	
+	void OnAddKeyframePointPopupClick(wxCommandEvent &evt);
+
+	void OnAddColorKeyframePointPopupClick(wxCommandEvent &evt);
 
 	void OnBSplineSubdivPopupClick(wxCommandEvent &evt);
 
@@ -177,18 +179,22 @@ public:
 
 	void spinMouseUp(wxMouseEvent &evt);
 
+	void colourMouseUp(wxMouseEvent &evt);
+
 	void mouseWheel(wxMouseEvent& event) {
 
 		if (scene->currentShape) {
-			scene->currentShape->SetScale( ((event.GetWheelRotation() > 0) ? 1.1 : (1 / 1.1)) * scene->currentShape->GetScale(scene->currentTime));
+			scene->currentShape->SetScale(scene->currentTime,((event.GetWheelRotation() > 0) ? 1.1 : (1 / 1.1)) * scene->currentShape->GetScale(scene->currentTime));
 			updateControlValues();
 		}
 
 	}
 
+	void keydown(wxKeyEvent& event);
+
 	//std::thread compute_thread2;
 
-	bool left_mouse_down, wasDragging, addingMorph, needPanelUpdate;
+	bool left_mouse_down, addingMorph, needPanelUpdate, dragging;
 	Canvas cur_img;
 	wxImage screenImage;
 	wxBitmap bmpBuf;
@@ -196,7 +202,10 @@ public:
 	int moveVtxId, moveCtrlId;
 	Scene* scene;
 	AnimatorApp* animatorApp;
-	wxMenu polygonMenu, changeShapeMenu, splineMenu;
+	wxMenu polygonMenu, changeShapeMenu, splineMenu, spinCtrlMenu, colorCtrlMenu;
+	std::map<SpinRegex*, Property*> widgetToProperty;
+	std::map<ClickableColourPicker*, Property*> colorwidgetToProperty;
+
 	DECLARE_EVENT_TABLE();
 };
 
@@ -223,6 +232,8 @@ public:
 
 	void render_animation(const char* filename);
 
+	void DestroySizer(const wxSizerItemList &toremove);
+
 	bool render_loop_on;
 	AnimatorPanel* animatorPanel;
 	AnimatorFrame *animatorFrame;
@@ -230,18 +241,7 @@ public:
 	wxNotebook* m_bookCtrl;
 	wxScrolled<wxPanel>* propertiesPanel;
 	wxBoxSizer * panelProperties_sizer;
-	std::map<SpinRegex*, float* > floatcontrols;
-	std::map<SpinRegex*, Keyable* > floatcontrolsKeyables;
-	std::map<wxCheckBox*, bool* > boolcontrols;
-	std::map<wxCheckBox*, Keyable* > boolcontrolsKeyables;
-	std::map<SpinRegex*, std::string* > floatstringcontrols;
-	std::map<SpinRegex*, Keyable* > floatstringcontrolsKeyables;
-	std::map<wxColourPickerCtrl*, unsigned char* > colorcontrols;
-	std::map<wxColourPickerCtrl*, Keyable* > colorcontrolsKeyables;
-	std::map<wxListCtrl*, float* > verticescontrols;
-	std::map<wxListCtrl*, Keyable* > verticescontrolsKeyables;
-	std::vector<int> controlIds;
-	std::vector<wxBoxSizer *> property_sizers;
+
 	wxStaticText* infoBar;
 
 	DECLARE_EVENT_TABLE();

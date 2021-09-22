@@ -736,7 +736,8 @@ double ceval_curveX(double x, double t, int arg_check) {
 		Spline* s = dynamic_cast<Spline*>(shapes[k]);
 		if (s) {
 			if (s->id == i) {
-				return s->evalBSpline(t)[0] * s->scale.eval1(t) + s->pos.eval(t)[0];
+				VerticesList controlPoints = s->controlPoints.getDisplayValue();
+				return s->evalBSpline(t, controlPoints)[0] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[0];
 			}
 			ns++;
 		}
@@ -752,12 +753,14 @@ double ceval_curveY(double x, double t, int arg_check) {
 	}
 	int i = x;
 	std::vector<Shape*>& shapes = myApp->animatorPanel->scene->shapes;
+	
 	int ns = 0;
 	for (int k = 0; k < shapes.size(); k++) {
 		Spline* s = dynamic_cast<Spline*>(shapes[k]);
 		if (s) {
 			if (s->id == i) {
-				return s->evalBSpline(t)[1] * s->scale.eval1(t) + s->pos.eval(t)[1];
+				VerticesList controlPoints = s->controlPoints.getDisplayValue();
+				return s->evalBSpline(t, controlPoints)[1] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[1];
 			}
 			ns++;
 		}
@@ -778,8 +781,9 @@ double ceval_curveA(double x, double t, int arg_check) {
 		Spline* s = dynamic_cast<Spline*>(shapes[k]);
 		if (s) {
 			if (s->id == i) {
-				Vec2f p2 = s->evalBSpline(t + 0.001);
-				Vec2f p1 = s->evalBSpline(t);
+				VerticesList controlPoints = s->controlPoints.getDisplayValue();
+				Vec2f p2 = s->evalBSpline(t + 0.001, controlPoints);
+				Vec2f p1 = s->evalBSpline(t, controlPoints);
 				float angle = atan2(p2[1] - p1[1], p2[0] - p1[0]);
 				return angle;
 			}

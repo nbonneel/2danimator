@@ -162,12 +162,16 @@
     <ClCompile Include="animator.cpp" />
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="ceval.cpp" />
+    <ClCompile Include="Property.cpp" />
+    <ClCompile Include="Shape.cpp" />
     <ClCompile Include="spinRegex.cpp" />
     <ClCompile Include="TextToLines.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="animator.h" />
     <ClInclude Include="Canvas.h" />
+    <ClInclude Include="ClickableColourPicker.h" />
+    <ClInclude Include="Property.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Shape.h" />
     <ClInclude Include="spinRegex.h" />

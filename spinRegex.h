@@ -9,15 +9,19 @@ class SpinRegex : public wxSpinCtrlDouble {
 public:
 	SpinRegex(wxWindow *parent, wxWindowID id = -1, const wxString &value = wxEmptyString, const wxPoint &pos = wxDefaultPosition, const wxSize &size = wxDefaultSize, long style = wxSP_ARROW_KEYS, double min = 0, double max = 100, double initial = 0, double inc = 1, const wxString &name = wxT("wxSpinCtrlDouble")):wxSpinCtrlDouble(parent, id, value, pos, size, wxSP_ARROW_KEYS, min, max, initial, inc, name) {
 		tval = 0.5;
+		dim = 1;
+		dim_id = 0;
 		m_textCtrl->Bind(wxEVT_LEFT_UP, wxMouseEventHandler(SpinRegex::MouseUpEvents), this);
+		m_textCtrl->Bind(wxEVT_RIGHT_UP, wxMouseEventHandler(SpinRegex::MouseUpEvents), this);
 		//m_textCtrl->Bind(wxEVT_LEFT_DOWN, wxMouseEventHandler(SpinRegex::MouseUpEvents), this);
 	}
-
+	virtual ~SpinRegex() {}
 
 	virtual void MouseUpEvents(wxMouseEvent &evt) {
-		wxMouseEvent event(wxEVT_LEFT_UP);
+
+		wxMouseEvent event(evt.LeftUp()?wxEVT_LEFT_UP: wxEVT_RIGHT_UP);
 		event.SetEventObject(this);
-		event.SetPosition(evt.GetPosition());
+		event.SetPosition(evt.GetPosition());		
 		GetEventHandler()->ProcessEvent(event);
 		ReleaseCapture();
 	}
@@ -48,6 +52,7 @@ public:
 
 
 	float tval;
+	int dim, dim_id;
 
 protected:
 

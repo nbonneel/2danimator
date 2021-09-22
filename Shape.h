@@ -4,8 +4,10 @@
 #include "Canvas.h"
 #include "network_simplex_simple.h"
 #include "TextToLines.h"
+#include "Property.h"
 
 using namespace lemon;
+class Spline;
 
 static inline void drawBox(Canvas& canvas, int x1, int y1, int x2, int y2) {
 	if (y2 < 0) return;
@@ -166,25 +168,24 @@ static inline void drawLineForInsidePolyline(Canvas& canvas, int x0, int y0, int
 
 class Shape {
 public:
-	Shape(bool visible = true):visible(visible) {
-		this->visible.name = "Visible"; this->visible.encodedTypes = "B";
-		parameters.push_back((Keyable*)&this->visible);
+	Shape(bool visible = true):visible(visible) {		
+		parameters.push_back((Property*)&this->visible);
 		id = numShapes;
 		numShapes++;
 	};
 	Shape(const Shape& b) {
 		visible = b.visible;
-		parameters.push_back((Keyable*)&this->visible);
+		parameters.push_back((Property*)&this->visible);
 	}
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const = 0;
 	virtual bool Contains(const Vec2f& coord, float time) const = 0;
 	virtual Shape* Clone() = 0;
-	virtual void SetPosition(const Vec2f& coord) = 0;
+	virtual void SetPosition(float time, const Vec2f& coord) = 0;
 	virtual Vec2f GetPosition(float time) = 0;
-	virtual void SetScale(float value) = 0;
+	virtual void SetScale(float time, float value) = 0;
 	virtual float GetScale(float time) = 0;
-	std::vector<Keyable*> parameters;
-	Bool visible;
+	std::vector<Property*> parameters;
+	VisibleProperty visible;
 	int id;
 	static int numShapes;
 };
@@ -193,43 +194,42 @@ public:
 class Disk : public Shape {
 public: 
 	Disk(const Vec2s& position, std::string radius, const Vec3u &color, const Vec3u &colorEdge, std::string thicknessEdge, bool visible = true):Shape(visible), pos(position), radius(radius), color(color), colorEdge(colorEdge), thicknessEdge(thicknessEdge) {
-		this->pos.name = "Center"; this->pos.encodedTypes = "SS";
-		this->radius.name = "Radius"; this->radius.encodedTypes = "S";
-		this->color.name = "Color"; this->color.encodedTypes = "C";
-		this->colorEdge.name = "Border Color"; this->colorEdge.encodedTypes = "C";
-		this->thicknessEdge.name = "Border Thickness"; this->thicknessEdge.encodedTypes = "S";
+		this->colorEdge.setName("Border Color");
+		this->radius.setDefaults("Radius", 0.f, 10000.f, 0.05f);
+		this->thicknessEdge.setDefaults("Edge thickness", 0.f, 1000.f, 1.f);
 
-		parameters.push_back((Keyable*)&this->pos);
-		parameters.push_back((Keyable*)&this->radius);
-		parameters.push_back((Keyable*)&this->color);
-		parameters.push_back((Keyable*)&this->thicknessEdge);
-		parameters.push_back((Keyable*)&this->colorEdge);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->radius);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thicknessEdge);
+		parameters.push_back((Property*)&this->colorEdge);
 	}
 
-	Disk(const Disk& d) : Shape(d.visible[0]), pos(d.pos), radius(d.radius), color(d.color), colorEdge(d.colorEdge),thicknessEdge(d.thicknessEdge) {
-		this->pos.name = "Center"; this->pos.encodedTypes = "SS";
-		this->radius.name = "Radius"; this->radius.encodedTypes = "S";
-		this->color.name = "Color"; this->color.encodedTypes = "C";
-		this->colorEdge.name = "Border Color"; this->colorEdge.encodedTypes = "C";
-		this->thicknessEdge.name = "Border Thickness"; this->thicknessEdge.encodedTypes = "S";
-		
-		parameters.push_back((Keyable*)&this->pos);
-		parameters.push_back((Keyable*)&this->radius);
-		parameters.push_back((Keyable*)&this->color);
-		parameters.push_back((Keyable*)&this->thicknessEdge);
-		parameters.push_back((Keyable*)&this->colorEdge);
+	Disk(const Disk& d) : Shape(true), pos(d.pos), radius(d.radius), color(d.color), colorEdge(d.colorEdge),thicknessEdge(d.thicknessEdge) {
+		this->colorEdge.setName("Border Color");
+		this->radius.setDefaults("Radius", 0.f, 10000.f, 0.05f);
+		this->thicknessEdge.setDefaults("Edge thickness", 0.f, 1000.f, 1.f);
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->radius);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thicknessEdge);
+		parameters.push_back((Property*)&this->colorEdge);
 		
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
-		float r = radius.eval1(time);
-		Vec2f p = pos.eval(time);
-		float th = thicknessEdge.eval1(time);
+		float r = radius.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
+		float th = thicknessEdge.getDisplayValue(time);
 		float r2 = sqr(r);
 		float r2i = sqr(r - th);
 		float r2ib = sqr(r - th -1);
 		float r2b = sqr(r +1);
-		if (visible[0]) {
+		Vec3u color = this->color.getDisplayValue(time);
+		Vec3u colorEdge = this->colorEdge.getDisplayValue(time);
+
+		if (visible.eval(time)) {
 			int startj = std::max(0, (int)(p[0] - r - 1));
 			int endj = std::min(canvas.W, (int)(p[0] + r + 2));
 #pragma omp parallel for
@@ -281,106 +281,99 @@ public:
 	}
 
 	virtual bool Contains(const Vec2f& coord, float time) const {
-		float r = radius.eval1(time);
-		Vec2f p = pos.eval(time);
+		float r = radius.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
 		if (sqr(coord[1] - p[1]) + sqr(coord[0] - p[0]) <= sqr(r)) {
 			return true;
 		}
 		return false;
 	}
 
-	virtual void SetPosition(const Vec2f& coord) {
-		//pos[0] = coord[0];  // Beware: not pos = coord, since this would erase the name of the property "position"/"center"/....
-		//pos[1] = coord[1];
-		double lval;
+	virtual void SetPosition(float time, const Vec2f& coord) {
+
+		/*double lval;
 		for (int i = 0; i < 2; i++) {
 			if (wxString(pos[i]).ToDouble(&lval)) {
 				pos[i] = std::to_string(coord[i]);
 			}
-		}
+		}*/
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));  // NEED TO CHECK WHY I DID ABOVE
+
 	}
 	virtual Vec2f GetPosition(float time) {
-		return pos.eval(time);
+		return pos.getDisplayValue(time);
 	}
 
-	virtual void SetScale(float value) {
+	virtual void SetScale(float time, float value) {
 		//radius[0] = value;  
-		double lval;
+		/*double lval;
 		if (wxString(radius[0]).ToDouble(&lval)) {
 			radius[0] = std::to_string(value);
-		}
+		}*/
+		radius.setDisplayValue(Expr(std::to_string(value)));  // NEED TO CHECK WHY I DID ABOVE
 	}
 	virtual float GetScale(float time) {
-		return radius.eval1(time);
+		return radius.getDisplayValue(time);
 	}
-	Vec2s pos;
-	Vec3u color, colorEdge;
-	Expr radius, thicknessEdge;
+	PositionProperty pos;
+	ColorProperty color, colorEdge;
+	FloatProperty radius, thicknessEdge;
 };
 
 class PolygonShape : public Shape { // Polygon already taken in wingdi.h (5127)...
 public:
 	PolygonShape(const Vec2s& position, std::string scale, std::string angle, const Vec3u &color, const Vec3u &edgeColor, std::string edgeThickness, bool visible = true):Shape(visible), pos(position), scale(scale), color(color), angle(angle), edgeColor(edgeColor), edgeThickness(edgeThickness) {
 		
-		this->pos.name = "Center"; this->pos.encodedTypes = "SS";
-		this->scale.name = "Scale"; this->scale.encodedTypes = "S";
-		this->color.name = "Color"; this->color.encodedTypes = "C";
-		this->edgeColor.name = "Edge Color"; this->edgeColor.encodedTypes = "C";
-		this->edgeThickness.name = "Edge Thickness"; this->edgeThickness.encodedTypes = "S";
-		this->angle.name = "Angle"; this->angle.encodedTypes = "S";
-		this->vertices.name = "Vertices"; this->vertices.encodedTypes = "L" + std::to_string(this->vertices.vertices.size());
-
-		parameters.push_back((Keyable*)&this->pos);
-		parameters.push_back((Keyable*)&this->scale);
-		parameters.push_back((Keyable*)&this->angle);
-		parameters.push_back((Keyable*)&this->color);
-		parameters.push_back((Keyable*)&this->edgeColor);
-		parameters.push_back((Keyable*)&this->edgeThickness);
-		parameters.push_back((Keyable*)&this->vertices);
+		this->edgeColor.setName("Edge Color");
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->angle.setDefaults("Angle (rad)", -1000.f, 1000.f, 0.01f);
+		this->edgeThickness.setDefaults("Edge thickness", 0.f, 1000.f, 1.f);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->angle);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->edgeColor);
+		parameters.push_back((Property*)&this->edgeThickness);
+		parameters.push_back((Property*)&this->vertices);
 	}
 
-	PolygonShape(const PolygonShape& d) : Shape(d.visible[0]), pos(d.pos), scale(d.scale), color(d.color),angle(d.angle), vertices(d.vertices), edgeColor(d.edgeColor), edgeThickness(d.edgeThickness) {
-		this->pos.name = "Center"; this->pos.encodedTypes = "SS";
-		this->scale.name = "Scale"; this->scale.encodedTypes = "S";
-		this->color.name = "Color"; this->color.encodedTypes = "C";
-		this->edgeColor.name = "Edge Color"; this->edgeColor.encodedTypes = "C";
-		this->edgeThickness.name = "Edge Thickness"; this->edgeThickness.encodedTypes = "S";		
-		this->angle.name = "Angle"; this->angle.encodedTypes = "S";
-		this->vertices.name = "Vertices"; this->vertices.encodedTypes = "L"+std::to_string(d.vertices.vertices.size());
-		parameters.push_back((Keyable*)&this->pos);
-		parameters.push_back((Keyable*)&this->scale);
-		parameters.push_back((Keyable*)&this->angle);
-		parameters.push_back((Keyable*)&this->color);
-		parameters.push_back((Keyable*)&this->edgeColor);
-		parameters.push_back((Keyable*)&this->edgeThickness);
-		parameters.push_back((Keyable*)&this->vertices);
-		this->vertices.firstParam = &this->vertices.vertices[0].coords[0];
+	PolygonShape(const PolygonShape& d) : Shape(true), pos(d.pos), scale(d.scale), color(d.color),angle(d.angle), vertices(d.vertices), edgeColor(d.edgeColor), edgeThickness(d.edgeThickness) {
+		this->edgeColor.setName("Edge Color");
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->angle.setDefaults("Angle (rad)", -1000.f, 1000.f, 0.01f);
+		this->edgeThickness.setDefaults("Edge thickness", 0.f, 1000.f, 1.f);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->angle);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->edgeColor);
+		parameters.push_back((Property*)&this->edgeThickness);
+		parameters.push_back((Property*)&this->vertices);
 	}
 
-	void addVertex(const Vec2f& v, bool createNewContour = false) {
-		vertices.addVertex(v, createNewContour);
-		this->vertices.encodedTypes = "L" + std::to_string(this->vertices.vertices.size());
-		this->vertices.firstParam = &this->vertices.vertices[0].coords[0];		
+	void BSplineSubdivide(float time);
+
+	void addVertex(float time, const Vec2f& v, bool createNewContour = false) {
+		vertices.addVertex(time, v, createNewContour);	
 	}
-	void insertVertex(const Vec2f& v, int prevVertex) {
-		vertices.insertVertex(v, prevVertex);
-		this->vertices.encodedTypes = "L" + std::to_string(this->vertices.vertices.size());
-		this->vertices.firstParam = &this->vertices.vertices[0].coords[0];
+	void insertVertex(float time, const Vec2f& v, int prevVertex) {
+		vertices.insertVertex(time, v, prevVertex);
 	}
-	int getComponentVtxCount(int component) {
-		if (component >= this->vertices.contourList.size()) return 0;
+	int getComponentVtxCount(float time, int component) {
+		if (component >= this->vertices.getDisplayValue().contourList.size()) return 0;
 		int start = 0;
 		if (component > 0) {
-			start = this->vertices.contourList[component - 1]+1;
+			start = this->vertices.getDisplayValue().contourList[component - 1]+1;
 		}
-		return this->vertices.contourList[component] - start + 1;
+		return this->vertices.getDisplayValue().contourList[component] - start + 1;
 	}
 
 	virtual Shape* Clone() {
 		return new PolygonShape(*this);
 	}
 
-	void setText(const char* text) {
+	void setText(float time, const char* text) {
+		VerticesList vertices;
 		TextToLine t(text);
 		std::vector<float> co;
 		std::vector<int> contours;
@@ -396,18 +389,19 @@ public:
 			}
 		}
 		vertices.contourList = contours;
+		this->vertices.setDisplayValue(vertices);
 
 	}
 
 
 	virtual bool Contains(const Vec2f& initPoint, float s, float a, const Vec2f &p, float time) const {
-		const Vec2f *pg1, *pg2, *pgend;
 		Vec2f point = rotate((initPoint  - p) / s, -a);
 
 		const int X = 0;
 		const int Y = 1;
 		int j, yflag0, yflag1, inside_flag, xflag0;
-		float ty, tx;
+		float ty, tx;		
+		VerticesList vertices = this->vertices.getDisplayValue();
 		const Vec2f *vtx0, *vtx1;
 		const Vec2f* pgon = &vertices.vertices[0];
 		int numverts = vertices.vertices.size();
@@ -561,10 +555,10 @@ public:
 	}
 
 	virtual bool Contains(const Vec2f& initPoint, float time) const {
-		return Contains(initPoint, scale.eval1(time), angle.eval1(time), pos.eval(time), time);
+		return Contains(initPoint, scale.getDisplayValue(time), angle.getDisplayValue(time), pos.getDisplayValue(time), time);
 	}
 
-	virtual bool ContainsForDraw(const FastVec2f& point) const {
+	virtual bool ContainsForDraw(const FastVec2f& point, const VerticesList& vertices) const {
 #if 0
 		const FastVec2f *pg1, *pg2, *pgend;
 		float tx, ty, u0, u1, u2, v0, v1, vx0, vy0, alpha, beta, denom;
@@ -721,7 +715,7 @@ public:
 			   return(inside_flag);
 	}
 
-	float distFromNearestEdgeForDraw(const FastVec2f& v) const {  // s = evaluated scale		
+	float distFromNearestEdgeForDraw(const FastVec2f& v, const VerticesList& vertices) const {  // s = evaluated scale		
 		float d = 1E9;
 		int N = fastTransformedVertices.size();
 		int curContour = 0;
@@ -753,8 +747,9 @@ public:
 		return sqrt(d);
 	}
 
-	Vec2f nearestPoint(const Vec2f& initPoint, float s, float a, const Vec2f &p) const {  // s = evaluated scale
+	Vec2f nearestPoint(const Vec2f& initPoint, float s, float a, const Vec2f &p, float time) const {  // s = evaluated scale
 		Vec2f v = rotate((initPoint - p) / s, -a);
+		VerticesList vertices = this->vertices.getDisplayValue();
 		float d = 1E9;
 		int N = vertices.vertices.size();
 		Vec2f result;
@@ -798,9 +793,10 @@ public:
 		return result;
 	}
 
-	int nearestVertex(const Vec2f& initPoint, float s, float a, const Vec2f &p, float searchRadius) const {  // s = evaluated scale ; segment = [result;result+1]
+	int nearestVertex(const Vec2f& initPoint, float s, float a, const Vec2f &p, float searchRadius, float time) const {  // s = evaluated scale ; segment = [result;result+1]
 		Vec2f v = rotate((initPoint - p) / s, -a);
 		float d = 1E9;
+		VerticesList vertices = this->vertices.getDisplayValue();
 		int N = vertices.vertices.size();
 		int result = -1;
 		for (int i = 0; i < N; i++) {
@@ -814,9 +810,10 @@ public:
 		return result;
 	}
 
-	int nearestSegment(const Vec2f& initPoint, float s, float a, const Vec2f &p) const {  // s = evaluated scale ; segment = [result;result+1]
+	int nearestSegment(const Vec2f& initPoint, float s, float a, const Vec2f &p, float time) const {  // s = evaluated scale ; segment = [result;result+1]
 		Vec2f v = rotate((initPoint - p) / s, -a);
 		float d = 1E9;
+		VerticesList vertices = this->vertices.getDisplayValue();
 		int N = vertices.vertices.size();
 		int result;
 		int curContour = 0;
@@ -860,15 +857,18 @@ public:
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
-		float s = scale.eval1(time);
-		float a = angle.eval1(time);
-		FastVec2f p(pos.eval(time));
+		VerticesList evalVertices = vertices.getDisplayValue();
+		Vec3u color = this->color.getDisplayValue(time);
+		Vec3u edgeColor = this->edgeColor.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		float a = angle.getDisplayValue(time);
+		FastVec2f p(pos.getDisplayValue(time));
 		int minX=1E9, maxX = -1E9, minY = 1E9, maxY = -1E9;
-		int N = vertices.vertices.size();
+		int N = evalVertices.vertices.size();
 		fastTransformedVertices.resize(N);
 		FastVec2f center(0, 0);
 		for (int i = 0; i < N; i++) {
-			FastVec2f v = rotate(FastVec2f(vertices.vertices[i]), a);
+			FastVec2f v = rotate(FastVec2f(evalVertices.vertices[i]), a);
 			fastTransformedVertices[i] = v * s + p;
 			center = center+fastTransformedVertices[i];
 			minX = std::min(minX, (int)(fastTransformedVertices[i][0]));
@@ -882,14 +882,14 @@ public:
 		maxX = std::min(maxX-1, canvas.W - 1);
 		minY = std::max(minY+1, 0);
 		maxY = std::min(maxY+1, canvas.H - 1);
-		float edgeThick = edgeThickness.eval1(time);
+		float edgeThick = edgeThickness.getDisplayValue(time);
 		const unsigned char* cc = &color.coords[0];
-		if (visible[0]) {
+		if (visible.eval(time)) {
 #pragma omp parallel for
 			for (int i = minY; i <= maxY; i++) {
 				for (int j = minX; j <= maxX; j++) {
-					if (ContainsForDraw(Vec2f(j, i))) {
-						/*float dist = distFromNearestEdgeForDraw(Vec2f(j, i));
+					if (ContainsForDraw(Vec2f(j, i), evalVertices)) {
+						/*float dist = distFromNearestEdgeForDraw(Vec2f(j, i), evalVertices);
 						if (dist < edgeThick) {
 							canvas(j, i, 0) = edgeColor[0];
 							canvas(j, i, 1) = edgeColor[1];
@@ -901,7 +901,7 @@ public:
 						memcpy(&canvas(j, i, 0), cc, 3 * sizeof(char));
 						//}
 					} else {
-						float dist = distFromNearestEdgeForDraw(Vec2f(j, i));
+						float dist = distFromNearestEdgeForDraw(Vec2f(j, i), evalVertices);
 						if (dist < 1) {
 							if (edgeThick > 0) {
 								canvas(j, i, 0) = canvas(j, i, 0)*(dist)+edgeColor[0] * (1 - dist);
@@ -921,11 +921,11 @@ public:
 			for (int i = 0; i < fastTransformedVertices.size(); i++) {
 
 				int nextPoint = i + 1;
-				if (i == vertices.contourList[curContour]) {
+				if (i == evalVertices.contourList[curContour]) {
 					if (curContour == 0) {
 						nextPoint = 0;
 					} else {
-						nextPoint = vertices.contourList[curContour - 1]+1;
+						nextPoint = evalVertices.contourList[curContour - 1]+1;
 					}
 				}
 				//drawLine(canvas, fastTransformedVertices[i][0], fastTransformedVertices[i][1], fastTransformedVertices[nextPoint][0], fastTransformedVertices[nextPoint][1], edgeColor, edgeThick);
@@ -934,15 +934,15 @@ public:
 				//drawLine(canvas, fastTransformedVertices[i][0], fastTransformedVertices[i][1], fastTransformedVertices[(i + 1) % N][0], fastTransformedVertices[(i + 1) % N][1], edgeColor, edgeThick);
 				int prevPoint = i - 1; 
 				if (prevPoint == -1) 
-					prevPoint = vertices.contourList[0];
+					prevPoint = evalVertices.contourList[0];
 				else 
-					if (curContour > 0 && prevPoint <= vertices.contourList[curContour - 1]) {
-						prevPoint = vertices.contourList[curContour];
+					if (curContour > 0 && prevPoint <= evalVertices.contourList[curContour - 1]) {
+						prevPoint = evalVertices.contourList[curContour];
 					}
 				int nextnextPoint = nextPoint + 1;
-				if (nextnextPoint > vertices.contourList[curContour]) {
+				if (nextnextPoint > evalVertices.contourList[curContour]) {
 					if (curContour>=1)
-						nextnextPoint = vertices.contourList[curContour - 1] + 1;
+						nextnextPoint = evalVertices.contourList[curContour - 1] + 1;
 					else
 						nextnextPoint = 1;
 				}
@@ -959,7 +959,7 @@ public:
 				//if (dot(v2, perp2) < 0) v2 = -v2;
 
 				drawLineForInsidePolyline(canvas, fastTransformedVertices[i][0], fastTransformedVertices[i][1], fastTransformedVertices[nextPoint][0], fastTransformedVertices[nextPoint][1], v1, v2, edgeColor, edgeThick*s);
-				if (i == vertices.contourList[curContour]) {
+				if (i == evalVertices.contourList[curContour]) {
 					curContour++;
 				}
 			}
@@ -967,7 +967,7 @@ public:
 
 		if (displayControls) { // draw Bbox
 			drawBox(canvas, ominX, ominY, omaxX, omaxY);
-			for (int i = 0; i < vertices.vertices.size(); i++) {
+			for (int i = 0; i < evalVertices.vertices.size(); i++) {
 				const FastVec2f &pp = fastTransformedVertices[i];
 				drawSquare(canvas, pp[0], pp[1], 5);
 			}
@@ -976,96 +976,105 @@ public:
 
 	}
 
-	virtual void SetPosition(const Vec2f& coord) {
+	virtual void SetPosition(float time, const Vec2f& coord) {
 		//pos[0] = coord[0];
 		//pos[1] = coord[1];
-		double lval;
+		/*double lval;
 		for (int i = 0; i < 2; i++) {
 			if (wxString(pos[i]).ToDouble(&lval)) {
 				pos[i] = std::to_string(coord[i]);
 			}
-		}
+		}*/
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));  // NEED TO CHECK WHY I DID ABOVE
 	}
 	virtual Vec2f GetPosition(float time) {
-		return pos.eval(time);
+		return pos.getDisplayValue(time);
 	}
-	virtual void SetScale(float value) {
-		double lval;
+	virtual void SetScale(float time, float value) {
+		/*double lval;
 		if (wxString(scale[0]).ToDouble(&lval)) {
 			scale[0] = std::to_string(value);
-		}
+		}*/
+		scale.setDisplayValue(Expr(std::to_string(value)));  // NEED TO CHECK WHY I DID ABOVE
 	}
 	virtual float GetScale(float time) {
-		return scale.eval1(time);
+		return scale.getDisplayValue(time);
 	}
 
-	Vec2s pos;
-	Vec3u color, edgeColor;
-	Expr scale, angle, edgeThickness;
-	VerticesList vertices;
+	PositionProperty pos;
+	ColorProperty color, edgeColor;
+	FloatProperty scale, angle, edgeThickness;
+	VerticesListProperty vertices;
 	mutable std::vector<FastVec2f> fastTransformedVertices;
 };
 
 class PolygonMorph : public Shape {
 public:
-	PolygonMorph(PolygonShape* s1 = NULL, PolygonShape* s2 = NULL, std::string t = std::string("0"), bool visible = true) : Shape(visible), s1(s1), s2(s2), t(t) {
-		this->t.name = "Interp. time"; this->t.encodedTypes = "T";
-		parameters.push_back((Keyable*)&this->t);
+	PolygonMorph(PolygonShape* s1 = NULL, PolygonShape* s2 = NULL, std::string t = std::string("0"), bool visible = true) : Shape(visible), s1(s1), s2(s2), t(t) {		
+		this->t.setDefaults("Interpolation time", -100.f, 100.f, 0.05f);
+		parameters.push_back((Property*)&this->t);
 	};
-	PolygonMorph(const PolygonMorph& d) : Shape(d.visible[0]), t(d.t), s1(d.s1), s2(d.s2) {
-		this->t.name = "Interp. time"; this->t.encodedTypes = "T";
-		parameters.push_back((Keyable*)&this->t);
+	PolygonMorph(const PolygonMorph& d) : Shape(true), t(d.t), s1(d.s1), s2(d.s2) {		
+		this->t.setDefaults("Interpolation time", -100.f, 100.f, 0.05f);
+		parameters.push_back((Property*)&this->t);
 	}
 
 	PolygonShape interpolatedShape(float time) const {
-		float tval = t.eval1(time);
+		float tval = t.getDisplayValue(time);
 		float scale1 = s1->GetScale(time);
 		float scale2 = s2->GetScale(time);
 		Vec2f pos1 = s1->GetPosition(time);
 		Vec2f pos2 = s2->GetPosition(time);
-		float angle1 = s1->angle.eval1(time);
-		float angle2 = s2->angle.eval1(time);
+		float angle1 = s1->angle.getDisplayValue(time);
+		float angle2 = s2->angle.getDisplayValue(time);
 		Vec2f pos = (1.f - tval)*pos1 + tval * pos2;
 		float scale = (1.f - tval)*scale1 + tval * scale2;
 		float angle = (1.f - tval)*angle1 + tval * angle2;
-		float thickness = (1.f - tval)*s1->edgeThickness.eval1(time) + tval * s2->edgeThickness.eval1(time);
+		float thickness = (1.f - tval)*s1->edgeThickness.getDisplayValue(time) + tval * s2->edgeThickness.getDisplayValue(time);
+		Vec3u color1 = s1->color.getDisplayValue(time);
+		Vec3u color2 = s2->color.getDisplayValue(time);
+		Vec3u edgeColor1 = s1->edgeColor.getDisplayValue(time);
+		Vec3u edgeColor2 = s2->edgeColor.getDisplayValue(time);
 		Vec3u col;
-		col[0] = (1.f - tval)*s1->color[0] + tval * s2->color[0];
-		col[1] = (1.f - tval)*s1->color[1] + tval * s2->color[1];
-		col[2] = (1.f - tval)*s1->color[2] + tval * s2->color[2];
+		col[0] = (1.f - tval)*color1[0] + tval * color2[0];
+		col[1] = (1.f - tval)*color1[1] + tval * color2[1];
+		col[2] = (1.f - tval)*color1[2] + tval * color2[2];
 		Vec3u edgecol;
-		edgecol[0] = (1.f - tval)*s1->edgeColor[0] + tval * s2->edgeColor[0];
-		edgecol[1] = (1.f - tval)*s1->edgeColor[1] + tval * s2->edgeColor[1];
-		edgecol[2] = (1.f - tval)*s1->edgeColor[2] + tval * s2->edgeColor[2];
+		edgecol[0] = (1.f - tval)*edgeColor1[0] + tval * edgeColor2[0];
+		edgecol[1] = (1.f - tval)*edgeColor1[1] + tval * edgeColor2[1];
+		edgecol[2] = (1.f - tval)*edgeColor1[2] + tval * edgeColor2[2];
 		PolygonShape s(Vec2s(std::to_string(pos[0]), std::to_string(pos[1])), std::to_string(scale), std::to_string(angle), col, edgecol, std::to_string(thickness));
 
 		typedef FullBipartiteDigraph Digraph;
 		DIGRAPH_TYPEDEFS(FullBipartiteDigraph);
 
-		int Nct = std::max(s1->vertices.contourList.size(), s2->vertices.contourList.size());
+		VerticesList vertices1 = s1->vertices.getDisplayValue();
+		VerticesList vertices2 = s2->vertices.getDisplayValue();
+
+		int Nct = std::max(vertices1.contourList.size(), vertices2.contourList.size());
 		for (int ct = 0; ct < Nct; ct++) {
-			int n1 = s1->getComponentVtxCount(ct);
-			int n2 = s2->getComponentVtxCount(ct);
+			int n1 = s1->getComponentVtxCount(time, ct);
+			int n2 = s2->getComponentVtxCount(time, ct);
 			std::vector<Vec2f> v1; v1.reserve(n1 + 3);
 			std::vector<Vec2f> v2; v2.reserve(n2 + 3);
 			if (n1 > 0) {
 				int start = 0;
 				if (ct > 0) {
-					start = s1->vertices.contourList[ct - 1] + 1;
+					start = vertices1.contourList[ct - 1] + 1;
 				}
-				int end = s1->vertices.contourList[ct];
+				int end = vertices1.contourList[ct];
 				for (int i = start; i <= end; i++) {
-					v1.push_back(s1->vertices.vertices[i]);
+					v1.push_back(vertices1.vertices[i]);
 				}
 			} else {
 				Vec2f center(0, 0);
 				int start = 0;
 				if (ct > 0) {
-					start = s2->vertices.contourList[ct - 1] + 1;
+					start = vertices2.contourList[ct - 1] + 1;
 				}
-				int end = s2->vertices.contourList[ct];
+				int end = vertices2.contourList[ct];
 				for (int i = start; i <= end; i++) {
-					center = center + s2->vertices.vertices[i];
+					center = center + vertices2.vertices[i];
 				}
 				center = center / (float)(end - start + 1.f);
 				v1.push_back(center + Vec2f(0.001f, 0.001f));
@@ -1076,21 +1085,21 @@ public:
 			if (n2 > 0) {
 				int start = 0;
 				if (ct > 0) {
-					start = s2->vertices.contourList[ct - 1] + 1;
+					start = vertices2.contourList[ct - 1] + 1;
 				}
-				int end = s2->vertices.contourList[ct];
+				int end = vertices2.contourList[ct];
 				for (int i = start; i <= end; i++) {
-					v2.push_back(s2->vertices.vertices[i]);
+					v2.push_back(vertices2.vertices[i]);
 				}
 			} else {
 				Vec2f center(0, 0);
 				int start = 0;
 				if (ct > 0) {
-					start = s1->vertices.contourList[ct - 1] + 1;
+					start = vertices1.contourList[ct - 1] + 1;
 				}
-				int end = s1->vertices.contourList[ct];
+				int end = vertices1.contourList[ct];
 				for (int i = start; i <= end; i++) {
-					center = center + s1->vertices.vertices[i];
+					center = center + vertices1.vertices[i];
 				}
 				center = center / (float)(end - start + 1.f);
 				v2.push_back(center + Vec2f(0.001f, 0.001f));
@@ -1132,7 +1141,7 @@ public:
 							dest = v2[j];
 						}
 					}
-					s.addVertex((1.f - tval)*v1[i] + tval * dest / sumAmount, i==0);
+					s.addVertex(time, (1.f - tval)*v1[i] + tval * dest / sumAmount, i==0);
 				}
 			} else {
 				for (int i = 0; i < n2; i++) {
@@ -1150,7 +1159,7 @@ public:
 							dest = v1[j];
 						}
 					}
-					s.addVertex((1.f - tval)*dest / sumAmount + tval * v2[i], i==0);
+					s.addVertex(time, (1.f - tval)*dest / sumAmount + tval * v2[i], i==0);
 				}
 			}
 
@@ -1163,7 +1172,7 @@ public:
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
-		if (visible[0]) {
+		if (visible.eval(time)) {
 			PolygonShape s(interpolatedShape(time));
 
 			s.Draw(canvas, time, displayControls);
@@ -1180,64 +1189,53 @@ public:
 	}
 
 
-	virtual void SetPosition(const Vec2f& coord) {
+	virtual void SetPosition(float time, const Vec2f& coord) {
 		//pos[0] = coord[0];
 		//pos[1] = coord[1];
 	}
 	virtual Vec2f GetPosition(float time) {
-		float tval = t.eval1(time);
+		float tval = t.getDisplayValue(time);
 		return (1.f - tval)*s1->GetPosition(time) + tval * s2->GetPosition(time);
 	}
-	virtual void SetScale(float value) {
+	virtual void SetScale(float time, float value) {
 		//scale[0] = value;
 	}
 	virtual float GetScale(float time) {
-		float tval = t.eval1(time);
+		float tval = t.getDisplayValue(time);
 		return (1.f - tval)*s1->GetScale(time) + tval * s2->GetScale(time);
 	}
 
-	Expr t;
+	FloatProperty t;
 	PolygonShape *s1, *s2;
 };
 
 class Spline : public Shape {
 public: 
 	Spline(const Vec2s& position, std::string scale, const Vec3u &color, bool visible = true, std::string thickness = "1") : Shape(visible), pos(position), scale(scale), color(color), thickness(thickness){
-
-		this->pos.name = "Center"; this->pos.encodedTypes = "SS";
-		this->scale.name = "Scale"; this->scale.encodedTypes = "S";
-		this->color.name = "Color"; this->color.encodedTypes = "C";
-		this->thickness.name = "Thickness"; this->thickness.encodedTypes = "S";
-		this->controlPoints.name = "Control Points"; this->controlPoints.encodedTypes = "L" + std::to_string(this->controlPoints.vertices.size());
-
-		parameters.push_back((Keyable*)&this->pos);
-		parameters.push_back((Keyable*)&this->scale);
-		parameters.push_back((Keyable*)&this->color);
-		parameters.push_back((Keyable*)&this->thickness);
-		parameters.push_back((Keyable*)&this->controlPoints);
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thickness);
+		parameters.push_back((Property*)&this->controlPoints);
 	}
-	Spline(const Spline& d) : Shape(d.visible[0]), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness){
-		this->pos.name = "Center"; this->pos.encodedTypes = "SS";
-		this->scale.name = "Scale"; this->scale.encodedTypes = "S";
-		this->color.name = "Color"; this->color.encodedTypes = "C";
-		this->thickness.name = "Thickness"; this->thickness.encodedTypes = "S";
-		this->controlPoints.name = "Control Points"; this->controlPoints.encodedTypes = "L" + std::to_string(d.controlPoints.vertices.size());
-		parameters.push_back((Keyable*)&this->pos);
-		parameters.push_back((Keyable*)&this->scale);
-		parameters.push_back((Keyable*)&this->color);
-		parameters.push_back((Keyable*)&this->thickness);
-		parameters.push_back((Keyable*)&this->controlPoints);
-		this->controlPoints.firstParam = &this->controlPoints.vertices[0].coords[0];
+	Spline(const Spline& d) : Shape(true), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness){
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thickness);
+		parameters.push_back((Property*)&this->controlPoints);		
 	}
 
-	void addVertex(const Vec2f& v) {
-		controlPoints.addVertex(v);
-		this->controlPoints.encodedTypes = "L" + std::to_string(this->controlPoints.vertices.size());
-		this->controlPoints.firstParam = &this->controlPoints.vertices[0].coords[0];
+	void addVertex(float time, const Vec2f& v) {
+		controlPoints.addVertex(time, v);
 	}
 
 	//0 1/6 2/6 3/6 4/6 5/6 6/6
-	Vec2f evalBSpline(float t) const { // t in 0..1
+	Vec2f evalBSpline(float t, const VerticesList& controlPoints) const { // t in 0..1
 		Vec2f result;
 		int N = controlPoints.vertices.size();
 		int i = t * (N - 1);
@@ -1271,14 +1269,16 @@ public:
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
-		float s = scale.eval1(time);
-		Vec2f p = pos.eval(time);
+		VerticesList evalControlPoints = controlPoints.getDisplayValue();
+		float s = scale.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
+		Vec3u color = this->color.getDisplayValue(time);
 		int minX = 1E9, maxX = -1E9, minY = 1E9, maxY = -1E9;
-		for (int i = 0; i < controlPoints.vertices.size(); i++) {
-			minX = std::min(minX, (int)((controlPoints.vertices[i][0] * s + p[0])));
-			maxX = std::max(maxX, (int)((controlPoints.vertices[i][0] * s + p[0]) + 0.5));
-			minY = std::min(minY, (int)((controlPoints.vertices[i][1] * s + p[1])));
-			maxY = std::max(maxY, (int)((controlPoints.vertices[i][1] * s + p[1]) + 0.5));
+		for (int i = 0; i < evalControlPoints.vertices.size(); i++) {
+			minX = std::min(minX, (int)((evalControlPoints.vertices[i][0] * s + p[0])));
+			maxX = std::max(maxX, (int)((evalControlPoints.vertices[i][0] * s + p[0]) + 0.5));
+			minY = std::min(minY, (int)((evalControlPoints.vertices[i][1] * s + p[1])));
+			maxY = std::max(maxY, (int)((evalControlPoints.vertices[i][1] * s + p[1]) + 0.5));
 		}
 		int ominX = minX, ominY = minY, omaxX = maxX, omaxY = maxY;
 		minX = std::max(minX - 1, 0);
@@ -1286,18 +1286,18 @@ public:
 		minY = std::max(minY + 1, 0);
 		maxY = std::min(maxY + 1, canvas.H - 1);
 
-		if (visible[0]) {
-			float edgeThick = thickness.eval1(time);
+		if (visible.eval(time)) {
+			float edgeThick = thickness.getDisplayValue(time);
 #pragma omp parallel for
 			for (int i = 0; i < 100; i++) {
-				Vec2f v = evalBSpline(i / 100.f)*s + p;
+				Vec2f v = evalBSpline(i / 100.f, evalControlPoints)*s + p;
 				if (v[0] >= 0 && v[0] <= canvas.W - 1 && v[1] >= 0 && v[1] <= canvas.H - 1) {
 					/*canvas(v[0], v[1], 0) = color[0];
 					canvas(v[0], v[1], 1) = color[1];
 					canvas(v[0], v[1], 2) = color[2];*/
-					Vec2f prevV = evalBSpline((i-1.f) / 100.f)*s + p;
-					Vec2f nextV = evalBSpline((i + 1.f) / 100.f)*s + p;
-					Vec2f nextnextV = evalBSpline((i + 1.f) / 100.f)*s + p;
+					Vec2f prevV = evalBSpline((i-1.f) / 100.f, evalControlPoints)*s + p;
+					Vec2f nextV = evalBSpline((i + 1.f) / 100.f, evalControlPoints)*s + p;
+					Vec2f nextnextV = evalBSpline((i + 1.f) / 100.f, evalControlPoints)*s + p;
 					FastVec2f perpprev(-v[1] + prevV[1], v[0] - prevV[0]);
 					FastVec2f perp(-nextV[1] + v[1], nextV[0] - v[0]);
 					FastVec2f perpnext(-nextnextV[1] + nextV[1], nextnextV[0] - nextV[0]);
@@ -1313,21 +1313,21 @@ public:
 
 		if (displayControls) { // draw Bbox
 			drawBox(canvas, ominX, ominY, omaxX, omaxY);
-			int N = controlPoints.vertices.size();
+			int N = evalControlPoints.vertices.size();
 			for (int i = 0; i < N-1; i++) {
-				FastVec2f pp = controlPoints.vertices[i] * s + p;
-				FastVec2f pn = controlPoints.vertices[i+1] * s + p;
+				FastVec2f pp = evalControlPoints.vertices[i] * s + p;
+				FastVec2f pn = evalControlPoints.vertices[i+1] * s + p;
 				FastVec2f dir1 = getNormalized(pn - pp);
 				FastVec2f v1;
 				if (i >= 1) {
-					FastVec2f pm = controlPoints.vertices[i-1] * s + p;
+					FastVec2f pm = evalControlPoints.vertices[i-1] * s + p;
 					v1 = dir1 + getNormalized(pm - pp);
 				} else
 					v1 = FastVec2f(-dir1[1], dir1[0]);
 				v1 = -getNormalized(v1);
 				FastVec2f v2;
 				if (i < N - 2) {
-					FastVec2f ppp = controlPoints.vertices[i +2] * s + p;
+					FastVec2f ppp = evalControlPoints.vertices[i +2] * s + p;
 					v2 = getNormalized(ppp - pp) + getNormalized(pp - pn);
 				} else {
 					v2 = FastVec2f(-dir1[1], dir1[0]);
@@ -1335,8 +1335,8 @@ public:
 				v2 = -getNormalized(v2);
 				drawLineForInsidePolyline(canvas, pp[0], pp[1], pn[0], pn[1], v1, v2, Vec3u(0,0,0), 2);
 			}
-			for (int i = 0; i < controlPoints.vertices.size(); i++) {
-				Vec2f pp = controlPoints.vertices[i] * s + p;
+			for (int i = 0; i < evalControlPoints.vertices.size(); i++) {
+				Vec2f pp = evalControlPoints.vertices[i] * s + p;
 				drawSquare(canvas, pp[0], pp[1], 5);
 			}
 		}
@@ -1347,24 +1347,24 @@ public:
 	}
 
 	virtual bool Contains(const Vec2f& initPoint, float time) const {
-		float s = scale.eval1(time);
-		Vec2f p = pos.eval(time);
+		VerticesList controlPoints = this->controlPoints.getDisplayValue();
+		float s = scale.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
 		float d = 1E9;
 		for (int i = 0; i < 50; i++) {
-			d = std::min(d, norm2(evalBSpline(i / 50.f)*s+p - initPoint));
+			d = std::min(d, norm2(evalBSpline(i / 50.f, controlPoints)*s+p - initPoint));
 		}
 		d = sqrt(d);
 		if (d < 5) return true;
 		return false;
 	}
 
-	void insertControlPoint(const Vec2f& v, int prevVertex) {
-		controlPoints.insertVertex(v, prevVertex);
-		this->controlPoints.encodedTypes = "L" + std::to_string(this->controlPoints.vertices.size());
-		this->controlPoints.firstParam = &this->controlPoints.vertices[0].coords[0];
+	void insertControlPoint(float time, const Vec2f& v, int prevVertex) {
+		controlPoints.insertVertex(time, v, prevVertex);
 	}
 
-	int nearestSegment(const Vec2f& initPoint, float s, float a, const Vec2f &p) const {  // s = evaluated scale ; segment = [result;result+1]
+	int nearestSegment(const Vec2f& initPoint, float s, float a, const Vec2f &p, float time) const {  // s = evaluated scale ; segment = [result;result+1]
+		VerticesList controlPoints = this->controlPoints.getDisplayValue();
 		Vec2f v = rotate((initPoint - p) / s, -a);
 		float d = 1E9;
 		int N = controlPoints.vertices.size();
@@ -1410,7 +1410,8 @@ public:
 		return result;
 	}
 
-	int nearestControlPoint(const Vec2f& initPoint, float s, float a, const Vec2f &p, float searchRadius) const {  // s = evaluated scale ; segment = [result;result+1]
+	int nearestControlPoint(const Vec2f& initPoint, float s, float a, const Vec2f &p, float searchRadius, float time) const {  // s = evaluated scale ; segment = [result;result+1]
+		VerticesList controlPoints = this->controlPoints.getDisplayValue();
 		Vec2f v = rotate((initPoint - p) / s, -a);
 		float d = 1E9;
 		int N = controlPoints.vertices.size();
@@ -1426,32 +1427,33 @@ public:
 		return result;
 	}
 
-	virtual void SetPosition(const Vec2f& coord) {
+	virtual void SetPosition(float time, const Vec2f& coord) {
 		//pos[0] = coord[0];
 		//pos[1] = coord[1];
-		double lval;
+		/*double lval;
 		for (int i = 0; i < 2; i++) {
 			if (wxString(pos[i]).ToDouble(&lval)) {
 				pos[i] = std::to_string(coord[i]);
 			}
-		}
+		}*/		
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));
 	}
 	virtual Vec2f GetPosition(float time) {
-		return pos.eval(time);
+		return pos.getDisplayValue(time);
 	}
-	virtual void SetScale(float value) {
-		double lval;
+	virtual void SetScale(float time, float value) {
+		/*double lval;
 		if (wxString(scale[0]).ToDouble(&lval)) {
 			scale[0] = std::to_string(value);
-		}
+		}*/
+		scale.setDisplayValue(std::to_string(value));  // NEED TO CHECK WHY I DID ABOVE
 	}
 	virtual float GetScale(float time) {
-		return scale.eval1(time);
+		return scale.getDisplayValue(time);
 	}
 
-	Vec2s pos;
-	Vec3u color;
-	Expr scale;
-	Expr thickness;
-	VerticesList controlPoints;
+	PositionProperty pos;
+	ColorProperty color;
+	FloatProperty scale, thickness;
+	VerticesListProperty controlPoints;
 };
