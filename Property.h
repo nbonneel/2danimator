@@ -197,7 +197,7 @@ public:
 
 class PositionProperty : public Property {
 public :
-	PositionProperty(Vec2s defaultPosition = Vec2s("0", "0")) : position(defaultPosition){};
+	PositionProperty(Vec2s defaultPosition = Vec2s("0", "0")) : position(defaultPosition), name("Position"){};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		Vec2s v = position.getDisplayValue();
@@ -250,8 +250,6 @@ public :
 		setValue(time, getDisplayText());
 	}
 	Vec2f getDisplayValue(float time) const {
-		double lab[3];
-		unsigned char rgb[3];
 		Vec2s v = position.getDisplayValue();
 		return Vec2f(eval_string(v[0], time), eval_string(v[1], time));
 	}
@@ -268,6 +266,7 @@ public :
 	}
 	Interpolator<Vec2s> position;
 	SpinRegex *propFloat1, *propFloat2;
+	std::string name;
 };
 
 class FloatProperty : public Property {
@@ -322,6 +321,48 @@ public:
 	std::string name;
 	float minVal, maxVal, step;
 };
+
+class IntProperty : public Property {
+public:
+	IntProperty(int defaultValue = 0) : value(defaultValue), minVal(0), maxVal(100), name("Nb X ticks") {};
+	virtual void CreateWidgets(float time);
+	virtual void UpdateWidgets(float time) {
+		int v = value.getDisplayValue();
+		propInt->SetValue(v);
+		if (value.hasKeyframe(time))
+			propInt->SetBackgroundColour(wxColour(255, 0, 0));
+		else
+			propInt->SetBackgroundColour(wxColour(255, 255, 255));
+	};
+	virtual void UpdateParameterFromWidget(float time) {
+		value.setDisplayValue(propInt->GetValue());
+	}
+	virtual void UpdateInternalTime(float time) {
+		value.setDisplayValue(value.getValue(time));
+	}
+	//float eval(float time) const { return eval_string(value.getValue(time).coords[0], time); }
+	void setValue(float time, int val) { return value.setValue(time, val); }
+	void setDefaults(std::string name, int minVal, int maxVal) { this->minVal = minVal; this->maxVal = maxVal; this->name = name;  };
+
+	virtual void addKeyframe(float time) {
+		value.setValue(time, getDisplayValue(time));
+	}
+	int getDisplayValue(float time) const {
+		return value.getDisplayValue();
+	}
+	void setDisplayValue(int val) {
+		return value.setDisplayValue(val);
+	}
+	void SetWidgetsNull() {
+		propInt = NULL;
+	}
+
+	Interpolator<int> value;
+	wxSpinCtrl *propInt;
+	std::string name;
+	int minVal, maxVal;
+};
+
 
 class ColorProperty : public Property {
 public:
@@ -441,35 +482,80 @@ public:
 	wxListCtrl* propListVertices;
 };
 
-class VisibleProperty : public Property {
+class BoolProperty : public Property {
 public:
-	VisibleProperty(bool defaultVisibility = true) : visible(defaultVisibility) {};
+	BoolProperty(bool defaultValue = true) : value(defaultValue), name("Visible") {};
+
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
-		bool v = visible.getDisplayValue();
+		bool v = value.getDisplayValue();
 		if (propBool) 
 			propBool->SetValue(v);
 	}; 
 	virtual void UpdateParameterFromWidget(float time) {
 		if (propBool)
-			visible.setDisplayValue(propBool->GetValue());
+			value.setDisplayValue(propBool->GetValue());
 	}
 	bool getDisplayValue() const {
-		return visible.getDisplayValue();
+		return value.getDisplayValue();
 	}
-	void setValue(float time, const bool &value) { visible.setValue(time, value); }
+	void setValue(float time, const bool &value) { this->value.setValue(time, value); }
 
 	virtual void addKeyframe(float time) {
 		setValue(time, getDisplayValue());
 	}
 	//bool eval(float time) const { return visible.getValue(time); }
 	virtual void UpdateInternalTime(float time) {
-		visible.setDisplayValue(visible.getValue(time));
+		value.setDisplayValue(value.getValue(time));
 	}
 
 	void SetWidgetsNull() {
 		propBool = NULL;
 	}
-	Interpolator<bool> visible;
+	Interpolator<bool> value;
+	std::string name;
 	wxCheckBox* propBool;
+};
+
+
+class ExprProperty : public Property {
+public:
+	ExprProperty(std::string defaultValue = "x") : value(defaultValue){};
+	virtual void CreateWidgets(float time);
+	virtual void UpdateWidgets(float time) {
+		std::string v = value.getDisplayValue();
+		propString->SetValue(v);
+		if (value.hasKeyframe(time))
+			propString->SetBackgroundColour(wxColour(255, 0, 0));
+		else
+			propString->SetBackgroundColour(wxColour(255, 255, 255));
+	};
+	virtual void UpdateParameterFromWidget(float time) {
+		value.setDisplayValue(propString->GetValue().ToStdString());
+	}
+	virtual void UpdateInternalTime(float time) {
+		value.setDisplayValue(value.getValue(time));
+	}
+	//float eval(float time) const { return eval_string(value.getValue(time).coords[0], time); }
+	void setValue(float time, const std::string &val) { return value.setValue(time, val); }
+	
+	void addKeyframe(float time, std::string val) {
+		value.setValue(time, val);
+	}
+	virtual void addKeyframe(float time) {
+		value.setValue(time, getDisplayValue(time));
+	}
+	std::string getDisplayValue(float time) const {
+		return value.getDisplayValue();
+	}
+
+	void setDisplayValue(const std::string &val) {
+		return value.setDisplayValue(val);
+	}
+	void SetWidgetsNull() {
+		propString = NULL;
+	}
+
+	Interpolator<std::string> value;
+	wxTextCtrl *propString;
 };

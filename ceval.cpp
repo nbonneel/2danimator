@@ -741,6 +741,18 @@ double ceval_curveX(double x, double t, int arg_check) {
 			}
 			ns++;
 		}
+		Plotter1D* p = dynamic_cast<Plotter1D*>(shapes[k]);
+		if (p) {
+			if (p->id == i) {
+				Vec2f position = p->pos.getDisplayValue(t);
+				float s = p->scale.getDisplayValue(t);
+				Vec2f relativeCenter = Vec2f(100, -100)*s;
+				Vec2f xrange = p->XExtent.getDisplayValue(t);
+				Vec2f yrange = p->YExtent.getDisplayValue(t);
+				Vec2f res = p->evalExpr(t*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, t);
+				return res[0];
+			}
+		}
 	}
 	ceval_error("curvex(): no corresponding curve");
 	return (double)NAN;
@@ -763,6 +775,18 @@ double ceval_curveY(double x, double t, int arg_check) {
 				return s->evalBSpline(t, controlPoints)[1] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[1];
 			}
 			ns++;
+		}
+		Plotter1D* p = dynamic_cast<Plotter1D*>(shapes[k]);
+		if (p) {
+			if (p->id == i) {
+				Vec2f position = p->pos.getDisplayValue(t);
+				float s = p->scale.getDisplayValue(t);
+				Vec2f relativeCenter = Vec2f(100, -100)*s;
+				Vec2f xrange = p->XExtent.getDisplayValue(t);
+				Vec2f yrange = p->YExtent.getDisplayValue(t);
+				Vec2f res = p->evalExpr(t*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, t);
+				return res[1];
+			}
 		}
 	}
 	ceval_error("curvey(): no corresponding curve");
@@ -788,6 +812,20 @@ double ceval_curveA(double x, double t, int arg_check) {
 				return angle;
 			}
 			ns++;
+		}
+		Plotter1D* p = dynamic_cast<Plotter1D*>(shapes[k]);
+		if (p) {
+			if (p->id == i) {
+				Vec2f position = p->pos.getDisplayValue(t);
+				float s = p->scale.getDisplayValue(t);
+				Vec2f relativeCenter = Vec2f(100, -100)*s;
+				Vec2f xrange = p->XExtent.getDisplayValue(t);
+				Vec2f yrange = p->YExtent.getDisplayValue(t);
+				Vec2f p1 = p->evalExpr(t*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, t);
+				Vec2f p2 = p->evalExpr((t+0.001)*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, t);
+				float angle = atan2(p2[1] - p1[1], p2[0] - p1[0]);
+				return angle;
+			}
 		}
 	}
 	ceval_error("curvea(): no corresponding curve");

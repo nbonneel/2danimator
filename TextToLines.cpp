@@ -328,6 +328,85 @@ void TextToLine::convert(std::vector<float>& coords, std::vector<int> &contours)
 		coords[i * 2+1] = coords[i * 2+1] * scale;
 	}
 }
+
+void my_draw_bitmap(Canvas& canvas, FT_Bitmap* bitmap, int x, int y, unsigned char* color) {
+	FT_Int  i, j, p, q;
+	FT_Int  x_max = x + bitmap->width;
+	FT_Int  y_max = y + bitmap->rows;
+
+
+	/* for simplicity, we assume that `bitmap->pixel_mode' */
+	/* is `FT_PIXEL_MODE_GRAY' (i.e., not a bitmap font)   */
+
+	for (i = x, p = 0; i < x_max; i++, p++) {
+		for (j = y, q = 0; j < y_max; j++, q++) {
+			if (i < 0 || j < 0 ||
+				i >= canvas.W || j >= canvas.H)
+				continue;
+
+			float v = bitmap->buffer[q * bitmap->width + p] / 255.;
+			canvas(i,j, 0) = canvas(i, j, 0)*(1-v) + v*color[0];
+			canvas(i, j, 1) = canvas(i, j, 1)*(1 - v) + v * color[1];
+			canvas(i, j, 2) = canvas(i, j, 2)*(1 - v) +  v * color[2];
+		}
+	}
+}
+
+void TextToLine::drawText(const std::string &text, Canvas &canvas, unsigned char* color, int x, int y, int charsize) {
+
+	FT_GlyphSlot  slot;
+	FT_Matrix     matrix;              /* transformation matrix */
+	FT_UInt       glyph_index;
+	FT_Vector     pen;                 /* untransformed origin */
+	int           n;
+	
+	int my_target_height = charsize;
+
+	FreeTypeLibrary library;
+	FreeTypeFace facetype(library, "C:\\Windows\\Fonts\\arialbd.ttf");
+
+	FT_Set_Char_Size(
+		facetype,    /* handle to face object           */
+		0,       /* char_width in 1/64th of points  */
+		charsize * 64,   /* char_height in 1/64th of points */
+		300,     /* horizontal device resolution    */
+		300);   /* vertical device resolution      */
+
+	FT_Face face = facetype;
+	slot = face->glyph;                /* a small shortcut */
+
+	float angle = 0;
+		/* set up matrix */
+	matrix.xx = (FT_Fixed)(cos(angle) * 0x10000L);
+	matrix.xy = (FT_Fixed)(-sin(angle) * 0x10000L);
+	matrix.yx = (FT_Fixed)(sin(angle) * 0x10000L);
+	matrix.yy = (FT_Fixed)(cos(angle) * 0x10000L);
+
+	/* the pen position in 26.6 cartesian space coordinates */
+	/* start at (300,200)                                   */
+	pen.x = x * 64;
+	pen.y = (my_target_height - y) * 64;
+
+	for (n = 0; n < text.size(); n++) {
+		/* set transformation */
+		FT_Set_Transform(face, &matrix, &pen);
+
+		/* load glyph image into the slot (erase previous one) */
+		FT_Error error = FT_Load_Char(face, text[n], FT_LOAD_RENDER);
+		if (error)
+			continue;  /* ignore errors */
+
+		  /* now, draw to our target surface (convert position) */
+		my_draw_bitmap(canvas, &slot->bitmap,
+			slot->bitmap_left,
+			my_target_height - slot->bitmap_top, color);
+
+		/* increment pen position */
+		pen.x += slot->advance.x;
+		pen.y += slot->advance.y;
+	}
+
+}
 /*
 int
 main(int argc,

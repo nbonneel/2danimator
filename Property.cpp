@@ -4,7 +4,7 @@
 
 void PositionProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, "Position");
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
@@ -52,7 +52,7 @@ void FloatProperty::CreateWidgets(float time) {
 
 	Expr s = value.getDisplayValue();
 	double v = ceval_result2(replace_variable(s[0], time));
-	propFloat1 = new SpinRegex(myApp->propertiesPanel, controlID, s[0], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10000, 10000, v, 0.05);
+	propFloat1 = new SpinRegex(myApp->propertiesPanel, controlID, s[0], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, minVal, maxVal, v, step);
 	propFloat1->dim_id = 0;
 	propFloat1->dim = 1;
 	propFloat1->Bind(wxEVT_SPINCTRLDOUBLE, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
@@ -62,6 +62,27 @@ void FloatProperty::CreateWidgets(float time) {
 	myApp->animatorPanel->widgetToProperty[propFloat1] = this;
 	controlID++;
 	property_sizer->Add(propFloat1, 1, wxEXPAND);
+
+	property_sizer->Layout();
+	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+}
+
+void IntProperty::CreateWidgets(float time) {
+	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	property_sizer->Add(spacing_text, 0, wxEXPAND);
+	controlID++;
+
+
+	int v = value.getDisplayValue();
+	propInt = new wxSpinCtrl(myApp->propertiesPanel, controlID, std::to_string(v), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, minVal, maxVal, v);
+	propInt->Bind(wxEVT_SPINCTRL, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
+	//propInt->Bind(wxEVT_LEFT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
+	propInt->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
+	propInt->Bind(wxEVT_MOUSE_CAPTURE_LOST, &AnimatorPanel::OnSpinMouseCaptureLost, myApp->animatorPanel);
+	//myApp->animatorPanel->widgetToProperty[propFloat1] = this;
+	controlID++;
+	property_sizer->Add(propInt, 1, wxEXPAND);
 
 	property_sizer->Layout();
 	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
@@ -120,14 +141,14 @@ void VerticesListProperty::CreateWidgets(float time) {
 }
 
 
-void VisibleProperty::CreateWidgets(float time) {
+void BoolProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, "Visible");
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 	//bool* b = (bool*)shape->parameters[i]->firstParam + num_param;
-	bool b = visible.getValue(time);
+	bool b = value.getValue(time);
 	propBool = new wxCheckBox(myApp->propertiesPanel, controlID, "", wxDefaultPosition, wxDefaultSize);
 	propBool->SetValue(b);
 	propBool->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
@@ -136,6 +157,26 @@ void VisibleProperty::CreateWidgets(float time) {
 	//controlIds.push_back(controlID);
 	controlID++;
 	property_sizer->Add(propBool, 1, wxEXPAND);
+
+	property_sizer->Layout();
+	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+}
+
+void ExprProperty::CreateWidgets(float time) {
+	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, "Expression y=");
+	property_sizer->Add(spacing_text, 0, wxEXPAND);
+	controlID++;
+
+
+	std::string s = value.getDisplayValue();
+	propString = new wxTextCtrl(myApp->propertiesPanel, controlID, s, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	propString->Bind(wxEVT_TEXT_ENTER, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
+	propString->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::textMouseUp, myApp->animatorPanel);
+	propString->Bind(wxEVT_MOUSE_CAPTURE_LOST, &AnimatorPanel::OnSpinMouseCaptureLost, myApp->animatorPanel);
+	//myApp->animatorPanel->widgetToProperty[propFloat1] = this;
+	controlID++;
+	property_sizer->Add(propString, 1, wxEXPAND);
 
 	property_sizer->Layout();
 	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
@@ -232,3 +273,4 @@ double Hue(double q) {
 		return value;
 	}
 }
+

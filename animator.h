@@ -67,6 +67,7 @@ public:
 
 		spinCtrlMenu.Append(57, "Add Keyframe");
 		colorCtrlMenu.Append(58, "Add Keyframe");
+		textCtrlMenu.Append(59, "Add Keyframe");
 		
 
 		//polygonMenu.Connect(wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddVtxPopupClick), this, this);
@@ -80,6 +81,8 @@ public:
 
 		Connect(57, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddKeyframePointPopupClick), this, this);
 		Connect(58, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddColorKeyframePointPopupClick), this, this);
+		Connect(59, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddTextKeyframePointPopupClick), this, this);
+		
 		
 		//s.Add(new Disk(Vec2f(0, 0), 20, Vec3u(0, 0, 255)));
 		start_display_thread();
@@ -162,6 +165,8 @@ public:
 
 	void OnAddColorKeyframePointPopupClick(wxCommandEvent &evt);
 
+	void OnAddTextKeyframePointPopupClick(wxCommandEvent &evt);
+
 	void OnBSplineSubdivPopupClick(wxCommandEvent &evt);
 
 	void OnChangePolygonToTextPopupClick(wxCommandEvent &evt);
@@ -184,6 +189,8 @@ public:
 	void mouseUp(wxMouseEvent& event);
 
 	void spinMouseUp(wxMouseEvent &evt);
+
+	void textMouseUp(wxMouseEvent &evt);
 
 	void colourMouseUp(wxMouseEvent &evt);
 
@@ -208,9 +215,10 @@ public:
 	int moveVtxId, moveCtrlId;
 	Scene* scene;
 	AnimatorApp* animatorApp;
-	wxMenu polygonMenu, changeShapeMenu, splineMenu, spinCtrlMenu, colorCtrlMenu;
+	wxMenu polygonMenu, changeShapeMenu, splineMenu, spinCtrlMenu, colorCtrlMenu, textCtrlMenu;
 	std::map<SpinRegex*, Property*> widgetToProperty;
 	std::map<ClickableColourPicker*, Property*> colorwidgetToProperty;
+	std::map<wxTextCtrl*, Property*> textwidgetToProperty;
 
 	DECLARE_EVENT_TABLE();
 };

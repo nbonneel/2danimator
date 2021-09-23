@@ -5,9 +5,18 @@
 #include "network_simplex_simple.h"
 #include "TextToLines.h"
 #include "Property.h"
-
+#include <iostream>
 using namespace lemon;
 class Spline;
+
+
+template<typename T>
+std::string to_string_with_precision(const T a_value, const int n = 6) {
+	std::ostringstream out;
+	out.precision(n);
+	out << a_value;
+	return out.str();
+}
 
 static inline void drawBox(Canvas& canvas, int x1, int y1, int x2, int y2) {
 	if (y2 < 0) return;
@@ -155,12 +164,19 @@ static inline void drawLineForInsidePolyline(Canvas& canvas, int x0, int y0, int
 	float y0b = y0;
 	float x1b = x1;
 	float y1b = y1;
-	for (int i = 0; i < wd; i++) {
+	FastVec2f b1dir(border1dir);
+	FastVec2f b2dir(border2dir);
+	if (isnan(border1dir[0]) || isnan(border1dir[1]) || isnan(border2dir[0]) || isnan(border2dir[0])) {
+		b1dir = FastVec2f(-y1 + y0, -x0 + x1);
+		b1dir = b1dir / norm(b1dir);
+		b2dir = b1dir;
+	}
+	for (int i = 0; i < wd; i++) {		
 		drawLine(canvas, x0b, y0b, x1b, y1b, color, 1);
-		x0b -= border1dir[0];
-		y0b -= border1dir[1];
-		x1b -= border2dir[0];
-		y1b -= border2dir[1];
+		x0b -= b1dir[0];
+		y0b -= b1dir[1];
+		x1b -= b2dir[0];
+		y1b -= b2dir[1];
 	}
 
 }
@@ -185,7 +201,7 @@ public:
 	virtual void SetScale(float time, float value) = 0;
 	virtual float GetScale(float time) = 0;
 	std::vector<Property*> parameters;
-	VisibleProperty visible;
+	BoolProperty visible;
 	int id;
 	static int numShapes;
 };
@@ -1297,7 +1313,7 @@ public:
 					canvas(v[0], v[1], 2) = color[2];*/
 					Vec2f prevV = evalBSpline((i-1.f) / 100.f, evalControlPoints)*s + p;
 					Vec2f nextV = evalBSpline((i + 1.f) / 100.f, evalControlPoints)*s + p;
-					Vec2f nextnextV = evalBSpline((i + 1.f) / 100.f, evalControlPoints)*s + p;
+					Vec2f nextnextV = evalBSpline((i + 2.f) / 100.f, evalControlPoints)*s + p;
 					FastVec2f perpprev(-v[1] + prevV[1], v[0] - prevV[0]);
 					FastVec2f perp(-nextV[1] + v[1], nextV[0] - v[0]);
 					FastVec2f perpnext(-nextnextV[1] + nextV[1], nextnextV[0] - nextV[0]);
@@ -1428,25 +1444,13 @@ public:
 	}
 
 	virtual void SetPosition(float time, const Vec2f& coord) {
-		//pos[0] = coord[0];
-		//pos[1] = coord[1];
-		/*double lval;
-		for (int i = 0; i < 2; i++) {
-			if (wxString(pos[i]).ToDouble(&lval)) {
-				pos[i] = std::to_string(coord[i]);
-			}
-		}*/		
 		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));
 	}
 	virtual Vec2f GetPosition(float time) {
 		return pos.getDisplayValue(time);
 	}
 	virtual void SetScale(float time, float value) {
-		/*double lval;
-		if (wxString(scale[0]).ToDouble(&lval)) {
-			scale[0] = std::to_string(value);
-		}*/
-		scale.setDisplayValue(std::to_string(value));  // NEED TO CHECK WHY I DID ABOVE
+		scale.setDisplayValue(std::to_string(value));  
 	}
 	virtual float GetScale(float time) {
 		return scale.getDisplayValue(time);
@@ -1456,4 +1460,191 @@ public:
 	ColorProperty color;
 	FloatProperty scale, thickness;
 	VerticesListProperty controlPoints;
+};
+
+class Plotter1D : public Shape {
+public:
+	Plotter1D(const Vec2s& position, std::string scale, const Vec3u &color, bool visible = true, std::string thickness = "1") : Shape(visible), pos(position), scale(scale), color(color), thickness(thickness), XExtent(Vec2s("0","1")), YExtent(Vec2s("0", "1")), axisXVisible(true), axisYVisible(true), xticks(5), yticks(5), showGrid(true){
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		this->XExtent.name = "X Range";
+		this->YExtent.name = "Y Range";
+		this->axisXVisible.name = "X Axis visibility";
+		this->axisYVisible.name = "Y Axis visibility";
+		this->xticks.name = "Nb X ticks";
+		this->yticks.name = "Nb Y ticks";
+		this->showGrid.name = "Show grid";
+
+		parameters.push_back((Property*)&this->expression);
+		parameters.push_back((Property*)&this->XExtent);
+		parameters.push_back((Property*)&this->YExtent);
+		parameters.push_back((Property*)&this->axisXVisible);
+		parameters.push_back((Property*)&this->axisYVisible);
+		parameters.push_back((Property*)&this->xticks);
+		parameters.push_back((Property*)&this->yticks);
+		parameters.push_back((Property*)&this->showGrid);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thickness);
+
+	}
+	Plotter1D(const Plotter1D& d) : Shape(true), pos(d.pos), scale(d.scale), color(d.color), expression(d.expression), thickness(d.thickness), XExtent(d.XExtent), YExtent(d.YExtent), axisXVisible(d.axisXVisible), axisYVisible(d.axisYVisible), xticks(d.xticks), yticks(d.yticks), showGrid(d.showGrid){
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		this->XExtent.name = "X Range";
+		this->YExtent.name = "Y Range";
+		this->axisXVisible.name = "X Axis visibility";
+		this->axisYVisible.name = "Y Axis visibility";
+		this->xticks.name = "Nb X ticks";
+		this->yticks.name = "Nb Y ticks";
+		this->showGrid.name = "Show grid";
+		parameters.push_back((Property*)&this->expression);
+		parameters.push_back((Property*)&this->XExtent);
+		parameters.push_back((Property*)&this->YExtent);
+		parameters.push_back((Property*)&this->axisXVisible);
+		parameters.push_back((Property*)&this->axisYVisible);
+		parameters.push_back((Property*)&this->xticks);
+		parameters.push_back((Property*)&this->yticks);
+		parameters.push_back((Property*)&this->showGrid);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thickness);
+		
+	}
+
+	Vec2f evalExpr(float t, const Vec2f &position, const Vec2f &relativeCenter, const Vec2f &xRange, const Vec2f &yRange, float s, float time) const {
+
+		std::string e = expression.getDisplayValue(time);
+		std::string newstring = replace_variable(e, t, 'x');
+		std::string newstring2 = replace_variable(newstring, time, 't');
+
+		float value = ceval_result2(newstring2);
+
+		return Vec2f((t-xRange[0]) / (xRange[1] - xRange[0]) *200, -((value - yRange[0]) /(yRange[1]-yRange[0]) )*200)*s + position - relativeCenter;
+	}
+
+
+
+	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
+
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Vec3u color = this->color.getDisplayValue(time);
+		Vec2f xrange = XExtent.getDisplayValue(time);
+		Vec2f yrange = YExtent.getDisplayValue(time);
+		float x0 = -xrange[0] / (xrange[1] - xrange[0]) * 200 * s + position[0] - relativeCenter[0];
+		float y0 = yrange[0] / (yrange[1] - yrange[0]) * 200 * s + position[1] - relativeCenter[1];
+
+
+
+		if (visible.getDisplayValue()) {
+			float edgeThick = thickness.getDisplayValue(time);
+			bool showgrid = showGrid.getDisplayValue();
+
+			unsigned char black[3] = { 0,0,0 };
+			unsigned char lightgrey[3] = { 230,230,230 };
+			float xscale = 200 * s / (xrange[1] - xrange[0]);
+			if (axisXVisible.getDisplayValue() && std::ceil(yrange[0]) <= 0 && std::floor(yrange[1]) >= 0) {
+				if (xticks.getDisplayValue(time) > 0) {
+					float step = (xrange[1] - xrange[0]) / (xticks.getDisplayValue(time) - 1);
+					for (float i = xrange[0]; i <= xrange[1]; i += step) {
+						std::string label = to_string_with_precision(i, 2);
+						TextToLine::drawText(label, canvas, &black[0], x0 + i * xscale - 3 * s*label.size(), y0 + 15 * s, 3 * s);
+						if (showgrid)
+							drawLine(canvas, x0 + i * xscale, position[1] - relativeCenter[1], x0 + i * xscale, position[1] - 200 * s - relativeCenter[1], Vec3u(lightgrey[0], lightgrey[1], lightgrey[2]), s);
+						drawLine(canvas, x0 + i * xscale, y0 - 3 * s, x0 + i * xscale, y0 + 3 * s, Vec3u(0, 0, 0), s);
+					}
+				}
+				
+			}
+
+
+			if (axisYVisible.getDisplayValue() && std::ceil(xrange[0]) <= 0 && std::floor(yrange[1]) >= 0) {
+				if (yticks.getDisplayValue(time) > 0) {
+					float step = (yrange[1] - yrange[0]) / (yticks.getDisplayValue(time) - 1);
+					for (float i = yrange[0]; i <= yrange[1]; i += step) {
+						std::string label = to_string_with_precision(i, 2);
+						TextToLine::drawText(label, canvas, &black[0], x0 - 10 - 5 * s*label.size(), y0 - i * 200 * s / (yrange[1] - yrange[0]) + 3 * s, 3 * s);
+						if (showgrid)
+							drawLine(canvas, position[0] - relativeCenter[0], y0 - i * 200 * s / (yrange[1] - yrange[0]), position[0] + 200 * s - relativeCenter[0], y0 - i * 200 * s / (yrange[1] - yrange[0]), Vec3u(lightgrey[0], lightgrey[1], lightgrey[2]), s);
+						drawLine(canvas, x0 - 3 * s, y0 - i * 200 * s / (yrange[1] - yrange[0]), x0 + 3 * s, y0 - i * 200 * s / (yrange[1] - yrange[0]), Vec3u(0, 0, 0), s);
+					}
+				}
+				drawLine(canvas, x0, position[1] - relativeCenter[1], x0, position[1] - 200 * s - relativeCenter[1], Vec3u(0, 0, 0), s);
+			}
+			if (axisXVisible.getDisplayValue() && std::ceil(yrange[0]) <= 0 && std::floor(yrange[1]) >= 0) { // draws the axis /after/ the grid, if any
+				//drawLine(canvas, position[0] - 100 * s - relativeCenter[0], y0, position[0] + 100 * s - relativeCenter[0], y0, Vec3u(0, 0, 0), s);
+				drawLine(canvas, position[0] - relativeCenter[0], y0, position[0] + 200 * s - relativeCenter[0], y0, Vec3u(0, 0, 0), s);
+			}
+
+
+#pragma omp parallel for
+			for (int i = 0; i < 100; i++) {
+				Vec2f v = evalExpr(i / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+				if (v[0] >= 0 && v[0] <= canvas.W - 1 && v[1] >= 0 && v[1] <= canvas.H - 1) {
+					/*canvas(v[0], v[1], 0) = color[0];
+					canvas(v[0], v[1], 1) = color[1];
+					canvas(v[0], v[1], 2) = color[2];*/
+					Vec2f prevV = evalExpr((i-1.f) / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+					Vec2f nextV = evalExpr((i + 1.f) / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+					Vec2f nextnextV = evalExpr((i + 2.f) / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+					FastVec2f perpprev(-v[1] + prevV[1], v[0] - prevV[0]);
+					FastVec2f perp(-nextV[1] + v[1], nextV[0] - v[0]);
+					FastVec2f perpnext(-nextnextV[1] + nextV[1], nextnextV[0] - nextV[0]);
+					FastVec2f v1 = getNormalized(perpprev + perp);
+					FastVec2f v2 = getNormalized(perpnext + perp);
+					//if (dot(perp2, v2 - v1) < 1E-5) perp = center - v1;
+
+					drawLineForInsidePolyline(canvas, v[0], v[1], nextV[0], nextV[1], v1, v2, color, edgeThick*s);
+
+				}
+			}
+
+
+		}
+
+	}
+	virtual bool Contains(const Vec2f& coord, float time) const {
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Vec3u color = this->color.getDisplayValue(time);
+		Vec2f xrange = XExtent.getDisplayValue(time);
+		Vec2f yrange = YExtent.getDisplayValue(time);
+		float x0 = position[0] - relativeCenter[0];
+		float y0 = position[1] - relativeCenter[1];
+		float x1 = position[0] + 200 * s - relativeCenter[0];
+		float y1 = position[1] - 200 * s - relativeCenter[1];
+		if (coord[0] > x0 && coord[0]<x1 && coord[1]>y1 && coord[1] < y0) return true;
+
+
+		return false;
+	}
+	virtual Shape* Clone() {
+		return new Plotter1D(*this);
+	}
+	virtual void SetPosition(float time, const Vec2f& coord) {
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));
+	}
+	virtual Vec2f GetPosition(float time) {
+		return pos.getDisplayValue(time);
+	}
+	virtual void SetScale(float time, float value) {
+		scale.setDisplayValue(std::to_string(value));
+	}
+	virtual float GetScale(float time) {
+		return scale.getDisplayValue(time);
+	}
+
+
+	PositionProperty pos;
+	PositionProperty XExtent, YExtent;
+	ColorProperty color;
+	FloatProperty scale, thickness;
+	ExprProperty expression;
+	BoolProperty axisXVisible, axisYVisible, showGrid;
+	IntProperty xticks, yticks;
 };

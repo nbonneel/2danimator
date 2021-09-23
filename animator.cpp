@@ -259,6 +259,20 @@ void AnimatorPanel::colourMouseUp(wxMouseEvent &evt) {
 	}
 }
 
+void AnimatorPanel::textMouseUp(wxMouseEvent &evt) {
+	if (!evt.GetEventObject()) {
+		evt.Skip();
+		return;
+	}
+	evt.Skip();
+	if (evt.RightUp()) {
+		textCtrlMenu.SetClientData(evt.GetEventObject());
+		PopupMenu(&textCtrlMenu);
+		return;
+	}
+}
+
+
 void AnimatorPanel::spinMouseUp(wxMouseEvent &evt) {
 	if (!evt.GetEventObject()) {
 		evt.Skip();
@@ -281,30 +295,55 @@ void AnimatorPanel::spinMouseUp(wxMouseEvent &evt) {
 	SpinRegex* obj = dynamic_cast<SpinRegex*>(evt.GetEventObject());
 	//this->ProcessEvent(evt);
 	Spline* spline = dynamic_cast<Spline*>(myApp->animatorPanel->scene->currentShape);
-	if (!spline) {
-		evt.Skip();	
-		return;
-	}
-	std::string val;
-	if (obj->dim == 1) {
-		val = "curvea(" + std::to_string(spline->id) + ",t)";
-		dynamic_cast<FloatProperty*>(myApp->animatorPanel->widgetToProperty[obj])->setDisplayValue(val);
-	} else {
-		if (obj->dim_id == 0) {
-			val = "curvex(" + std::to_string(spline->id) + ",t)";			
-		} else	if (obj->dim_id == 1) {
-			val = "curvey(" + std::to_string(spline->id) + ",t)";
-		}
-		dynamic_cast<PositionProperty*>(myApp->animatorPanel->widgetToProperty[obj])->setValue(scene->currentTime, obj->dim_id, val);
-	}
-	obj->SetValue(val);
+	if (spline) {
 
-	//*(myApp->floatstringcontrols[obj]) = val;
-	
-	myApp->infoBar->SetLabelText(std::to_string(evt.GetX()) + "    " + std::to_string(evt.GetY()));	
-	myApp->animatorPanel->needPanelUpdate = false;
-	spline->SetPosition(scene->currentTime, myApp->animatorPanel->scene->oldPos);
-	myApp->animatorPanel->scene->currentShape = myApp->animatorPanel->scene->previousShape;
+		std::string val;
+		if (obj->dim == 1) {
+			val = "curvea(" + std::to_string(spline->id) + ",t)";
+			dynamic_cast<FloatProperty*>(myApp->animatorPanel->widgetToProperty[obj])->setDisplayValue(val);
+		} else {
+			if (obj->dim_id == 0) {
+				val = "curvex(" + std::to_string(spline->id) + ",t)";
+			} else	if (obj->dim_id == 1) {
+				val = "curvey(" + std::to_string(spline->id) + ",t)";
+			}
+			dynamic_cast<PositionProperty*>(myApp->animatorPanel->widgetToProperty[obj])->setValue(scene->currentTime, obj->dim_id, val);
+		}
+		obj->SetValue(val);
+
+		//*(myApp->floatstringcontrols[obj]) = val;
+
+		myApp->infoBar->SetLabelText(std::to_string(evt.GetX()) + "    " + std::to_string(evt.GetY()));
+		myApp->animatorPanel->needPanelUpdate = false;
+		spline->SetPosition(scene->currentTime, myApp->animatorPanel->scene->oldPos);
+		myApp->animatorPanel->scene->currentShape = myApp->animatorPanel->scene->previousShape;	
+	}
+
+	Plotter1D* plotter = dynamic_cast<Plotter1D*>(myApp->animatorPanel->scene->currentShape);
+	if (plotter) {
+
+		std::string val;
+		if (obj->dim == 1) {
+			val = "curvea(" + std::to_string(plotter->id) + ",t)";
+			dynamic_cast<FloatProperty*>(myApp->animatorPanel->widgetToProperty[obj])->setDisplayValue(val);
+		} else {
+			if (obj->dim_id == 0) {
+				val = "curvex(" + std::to_string(plotter->id) + ",t)";
+			} else	if (obj->dim_id == 1) {
+				val = "curvey(" + std::to_string(plotter->id) + ",t)";
+			}
+			dynamic_cast<PositionProperty*>(myApp->animatorPanel->widgetToProperty[obj])->setValue(scene->currentTime, obj->dim_id, val);
+		}
+		obj->SetValue(val);
+
+		//*(myApp->floatstringcontrols[obj]) = val;
+
+		myApp->infoBar->SetLabelText(std::to_string(evt.GetX()) + "    " + std::to_string(evt.GetY()));
+		myApp->animatorPanel->needPanelUpdate = false;
+		plotter->SetPosition(scene->currentTime, myApp->animatorPanel->scene->oldPos);
+		myApp->animatorPanel->scene->currentShape = myApp->animatorPanel->scene->previousShape;
+	}
+
 	updateControlValues();
 	evt.Skip();
 	paintNow();
@@ -344,6 +383,14 @@ void AnimatorPanel::OnAddColorKeyframePointPopupClick(wxCommandEvent &evt) {
 	if (c) c->addKeyframe(scene->currentTime, c->getDisplayValue(scene->currentTime));
 }
 
+void AnimatorPanel::OnAddTextKeyframePointPopupClick(wxCommandEvent &evt) {
+	AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
+	wxMenu* menu = dynamic_cast<wxMenu*>(evt.GetEventObject());
+	wxTextCtrl* textc = (wxTextCtrl*)(menu->GetClientData());
+	ExprProperty* e = dynamic_cast<ExprProperty*>(curPanel->textwidgetToProperty[textc]);
+	if (e) e->addKeyframe(scene->currentTime, e->getDisplayValue(scene->currentTime));
+}
+
 wxControl* AnimatorApp::addObjectButton(const char* name, Shape* s, wxPanel* panel, wxPanel* parent) {
 
 	static int objId = 1000;
@@ -375,6 +422,7 @@ void AnimatorApp::DestroySizer(wxSizerItemList toremove) {
 void AnimatorApp::setupPanelProperties(Shape* shape) {
 	myApp->animatorPanel->widgetToProperty.clear();
 	myApp->animatorPanel->colorwidgetToProperty.clear();
+	myApp->animatorPanel->textwidgetToProperty.clear();
 
 	wxSizerItemList sil = panelProperties_sizer->GetChildren();
 	CallAfter(&AnimatorApp::DestroySizer, sil);
@@ -443,6 +491,8 @@ bool AnimatorApp::OnInit() {
 	defaultSpline->addVertex(-1.f, Vec2f(100, 150));
 	defaultSpline->addVertex(-1.f, Vec2f(100, 90));
 	panelObject_sizer->Add(addObjectButton("BSpline", defaultSpline, panelObject, animatorPanel), 0, wxEXPAND);
+
+	panelObject_sizer->Add(addObjectButton("1D Plot", new Plotter1D(Vec2s("200", "200"), "1", Vec3u(241, 198, 198)), panelObject, animatorPanel), 0, wxEXPAND);
 
 	panelObject->SetSizer(panelObject_sizer);
 

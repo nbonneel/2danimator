@@ -8,10 +8,15 @@
 #include <map>
 #include <array>
 
-static inline std::string replace_variable(const std::string& s, float t) {
+static inline bool is_letter(char l) {
+	//return !((l <= '9'&& l >= '0') || (l == '.'));  // no, may be operators *, /, -
+	return (l >= 'a' && l <= 'z') || (l >= 'A' && l <= 'Z');
+}
+
+static inline std::string replace_variable(const std::string& s, float t, char var = 't') {
 	std::string newstring; newstring.reserve(s.size());
 	for (int j = 0; j < s.size(); j++) {
-		if (s[j] == 't') {
+		if (s[j] == var && ( (s.size()==1) || ((j==0) && !is_letter(s[j+1])) || ( (j==s.size()-1) && !is_letter(s[j-1])) || (!is_letter(s[j-1]) && !is_letter(s[j+1])))) {
 			newstring = newstring + "(" + std::to_string(t) + ")";
 		} else {
 			newstring = newstring + s[j];
@@ -21,7 +26,7 @@ static inline std::string replace_variable(const std::string& s, float t) {
 }
 static inline float eval_string(const std::string& s, float t) {
 	std::string newstring = replace_variable(s, t);
-	return  ceval_result2(newstring);
+	return  (float)ceval_result2(newstring);
 }
 template<typename T> T sqr(T x) {
 	return x * x;
@@ -368,7 +373,7 @@ public:
 		vertices.clear();
 		contourList.clear();
 	}
-	int size() const { return vertices.size(); };
+	int size() const { return (int)vertices.size(); };
 	VerticesList& addVertex(const Vec2f& v, bool createNewContour = false) {
 		vertices.push_back(v);
 		if (contourList.size() == 0 || createNewContour) {

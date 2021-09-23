@@ -3,6 +3,7 @@
 #include FT_FREETYPE_H
 #include <sstream>
 #include <vector>
+#include "Canvas.h"
 
 class TextToLine {
 public:
@@ -10,6 +11,9 @@ public:
 
 	}
 	void convert(std::vector<float>& coords, std::vector<int> &contours);
+
+	static void drawText(const std::string &text, Canvas& canvas, unsigned char* color, int x, int y, int charsize);
+
 	std::string text;
 };
 
