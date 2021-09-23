@@ -229,7 +229,7 @@ public:
 		Vec3u color = this->color.getDisplayValue(time);
 		Vec3u colorEdge = this->colorEdge.getDisplayValue(time);
 
-		if (visible.eval(time)) {
+		if (visible.getDisplayValue()) {
 			int startj = std::max(0, (int)(p[0] - r - 1));
 			int endj = std::min(canvas.W, (int)(p[0] + r + 2));
 #pragma omp parallel for
@@ -884,7 +884,7 @@ public:
 		maxY = std::min(maxY+1, canvas.H - 1);
 		float edgeThick = edgeThickness.getDisplayValue(time);
 		const unsigned char* cc = &color.coords[0];
-		if (visible.eval(time)) {
+		if (visible.getDisplayValue()) {
 #pragma omp parallel for
 			for (int i = minY; i <= maxY; i++) {
 				for (int j = minX; j <= maxX; j++) {
@@ -1172,7 +1172,7 @@ public:
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
-		if (visible.eval(time)) {
+		if (visible.getDisplayValue()) {
 			PolygonShape s(interpolatedShape(time));
 
 			s.Draw(canvas, time, displayControls);
@@ -1286,7 +1286,7 @@ public:
 		minY = std::max(minY + 1, 0);
 		maxY = std::min(maxY + 1, canvas.H - 1);
 
-		if (visible.eval(time)) {
+		if (visible.getDisplayValue()) {
 			float edgeThick = thickness.getDisplayValue(time);
 #pragma omp parallel for
 			for (int i = 0; i < 100; i++) {

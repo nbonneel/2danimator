@@ -28,8 +28,8 @@ void PolygonShape::BSplineSubdivide(float time) {
 		sp.controlPoints.addVertex(time, verticesEval.vertices[startV + 1]);
 
 		for (int i = 0; i < 2 * (N); i++) {
-			float tparam = i / (2.0*N);  // in [0, 1[
-			Vec2f pp = sp.evalBSpline(tparam*(N + 1.) / (N + 3.), verticesEval);
+			float tparam = i / (2.0*N);  // in [0, 1[			
+			Vec2f pp = sp.evalBSpline(tparam*(N + 1.) / (N + 3.), sp.controlPoints.getDisplayValue());
 			newList.addVertex(pp, i == 0);
 		}
 	}
@@ -40,5 +40,5 @@ void PolygonShape::BSplineSubdivide(float time) {
 	}
 	//vertices.Clear();
 	//p->vertices = newList;
-	vertices.setValue(time, newList);
+	vertices.setDisplayValue(newList);
 }

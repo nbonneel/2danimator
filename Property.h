@@ -446,13 +446,13 @@ public:
 	VisibleProperty(bool defaultVisibility = true) : visible(defaultVisibility) {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
-		bool v = visible.getValue(time);
+		bool v = visible.getDisplayValue();
 		if (propBool) 
 			propBool->SetValue(v);
 	}; 
 	virtual void UpdateParameterFromWidget(float time) {
 		if (propBool)
-			visible.setValue(time, propBool->GetValue());
+			visible.setDisplayValue(propBool->GetValue());
 	}
 	bool getDisplayValue() const {
 		return visible.getDisplayValue();
@@ -462,7 +462,10 @@ public:
 	virtual void addKeyframe(float time) {
 		setValue(time, getDisplayValue());
 	}
-	bool eval(float time) const { return visible.getValue(time); }
+	//bool eval(float time) const { return visible.getValue(time); }
+	virtual void UpdateInternalTime(float time) {
+		visible.setDisplayValue(visible.getValue(time));
+	}
 
 	void SetWidgetsNull() {
 		propBool = NULL;
