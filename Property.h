@@ -802,7 +802,7 @@ public:
 
 class PointSetProperty : public Property {
 public:
-	PointSetProperty() : Property("PointSetProperty") {};
+	PointSetProperty() : Property("PointSetProperty"), propertyName("Point set"){ };
 	void setName(std::string propertyName) { this->propertyName = propertyName; }
 
 	virtual void CreateWidgets(float time);

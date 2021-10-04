@@ -203,6 +203,7 @@ public:
 			do {
 				is.getline(line, 255);
 				l = std::string(line);
+				l = ltrim(l);
 			} while (l == "");
 			is >> *(v.parameters[i]);
 		}
