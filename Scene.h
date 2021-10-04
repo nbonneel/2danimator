@@ -30,6 +30,32 @@ public:
 		shapes.push_back(sh);
 	}
 
+	void Clear() {
+		shapes.clear();
+		currentShape = NULL;
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const Scene& v) {
+		os << v.shapes.size() << std::endl;
+		for (int i = 0; i < v.shapes.size(); i++) {			
+			os << v.shapes[i] << std::endl;
+		}
+			
+		os << v.currentTime << std::endl;
+		return os;
+	}
+	friend std::istream& operator>>(std::istream& is, Scene& v) {
+		int nvalues;
+		is >> nvalues;
+		v.shapes.resize(nvalues);
+		for (int i = 0; i < nvalues; i++) {
+			is >> v.shapes[i];
+			//v.shapes[i] = Shape::create(is);
+		}
+		is >> v.currentTime;
+		return is;
+	}
+
 	std::vector<Shape*> shapes;
 	Shape *currentShape, *previousShape;
 	Vec2f oldPos;

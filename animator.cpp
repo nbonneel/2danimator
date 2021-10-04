@@ -22,8 +22,14 @@ int Shape::numShapes = 0;
 AnimatorFrame::AnimatorFrame() : wxFrame(NULL, wxID_ANY, wxT("2D Animator by N.Bonneel"),
 	wxPoint(10, 100)) {
 	wxMenu *file_menu = new wxMenu();
+	
+	file_menu->Append(202, wxT("&Load scene..."));
+	file_menu->Append(201, wxT("&Save scene..."));
 	file_menu->Append(200, wxT("&Export image sequence..."));
+
 	Connect(200, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorFrame::ExportSequence), NULL, this);
+	Connect(201, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorFrame::SaveScene), NULL, this);
+	Connect(202, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorFrame::LoadScene), NULL, this);
 
 	wxMenuBar* menu_bar = new wxMenuBar();
 	menu_bar->Append(file_menu, wxT("&File"));
@@ -45,6 +51,38 @@ void AnimatorFrame::ExportSequence(wxCommandEvent &evt) {
 
 	myApp->render_animation(saveFileDialog.GetPath());
 }
+void AnimatorFrame::SaveScene(wxCommandEvent &evt) {
+	wxFileDialog
+		saveFileDialog(this, _("Save Scene file"), "", "",
+			"Scene files (*.anm)|*.anm", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+	if (saveFileDialog.ShowModal() == wxID_CANCEL)
+		return;
+
+	std::ofstream f(saveFileDialog.GetPath().ToStdString());
+	f << *(myApp->animatorPanel->scene) << std::endl;
+	f.close();
+}
+
+void AnimatorFrame::LoadScene(wxCommandEvent &evt) {
+	wxFileDialog
+		loadFileDialog(this, _("Load Scene file"), "", "",
+			"Scene files (*.anm)|*.anm", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+	if (loadFileDialog.ShowModal() == wxID_CANCEL)
+		return;
+	ClearScene();
+	std::ifstream f(loadFileDialog.GetPath().ToStdString());
+	f >> *(myApp->animatorPanel->scene);
+	f.close();
+}
+
+void AnimatorFrame::ClearScene() {
+	myApp->animatorPanel->scene->Clear();
+	myApp->animatorPanel->widgetToProperty.clear();
+	myApp->animatorPanel->colorwidgetToProperty.clear();
+	myApp->animatorPanel->filenamewidgetToProperty.clear();
+	myApp->animatorPanel->textwidgetToProperty.clear();
+}
+
 
 void AnimatorApp::render_animation(const char* filename) {
 	std::string sfilename(filename);
@@ -259,6 +297,21 @@ void AnimatorPanel::colourMouseUp(wxMouseEvent &evt) {
 	}
 }
 
+void AnimatorPanel::filenameMouseUp(wxMouseEvent &evt) {
+	if (!evt.GetEventObject()) {
+		evt.Skip();
+		return;
+	}
+	evt.Skip();
+	if (evt.RightUp()) {
+		filenameCtrlMenu.SetClientData(evt.GetEventObject());
+		PopupMenu(&filenameCtrlMenu);
+		return;
+	}
+}
+
+
+
 void AnimatorPanel::textMouseUp(wxMouseEvent &evt) {
 	if (!evt.GetEventObject()) {
 		evt.Skip();
@@ -390,6 +443,13 @@ void AnimatorPanel::OnAddTextKeyframePointPopupClick(wxCommandEvent &evt) {
 	ExprProperty* e = dynamic_cast<ExprProperty*>(curPanel->textwidgetToProperty[textc]);
 	if (e) e->addKeyframe(scene->currentTime, e->getDisplayValue(scene->currentTime));
 }
+void AnimatorPanel::OnAddFilenameKeyframePointPopupClick(wxCommandEvent &evt) {
+	AnimatorPanel* curPanel = (AnimatorPanel*)evt.GetEventUserData();
+	wxMenu* menu = dynamic_cast<wxMenu*>(evt.GetEventObject());
+	ClickableFilePicker* picker = (ClickableFilePicker*)(menu->GetClientData());
+	FilenameProperty* f = dynamic_cast<FilenameProperty*>(curPanel->filenamewidgetToProperty[picker]);
+	if (f) f->addKeyframe(scene->currentTime, f->getDisplayValue(scene->currentTime));
+}
 
 wxControl* AnimatorApp::addObjectButton(const char* name, Shape* s, wxPanel* panel, wxPanel* parent) {
 
@@ -422,6 +482,7 @@ void AnimatorApp::DestroySizer(wxSizerItemList toremove) {
 void AnimatorApp::setupPanelProperties(Shape* shape) {
 	myApp->animatorPanel->widgetToProperty.clear();
 	myApp->animatorPanel->colorwidgetToProperty.clear();
+	myApp->animatorPanel->filenamewidgetToProperty.clear();
 	myApp->animatorPanel->textwidgetToProperty.clear();
 
 	wxSizerItemList sil = panelProperties_sizer->GetChildren();
@@ -494,6 +555,10 @@ bool AnimatorApp::OnInit() {
 
 	panelObject_sizer->Add(addObjectButton("1D Plot", new Plotter1D(Vec2s("200", "200"), "1", Vec3u(241, 198, 198)), panelObject, animatorPanel), 0, wxEXPAND);
 
+	panelObject_sizer->Add(addObjectButton("Grid", new Grid(Vec2s("200", "200"), "1", Vec3u(241, 198, 198)), panelObject, animatorPanel), 0, wxEXPAND);
+
+	panelObject_sizer->Add(addObjectButton("Point Set", new PointSet(Vec2s("200", "200"), "1", Vec3u(212, 61, 81)), panelObject, animatorPanel), 0, wxEXPAND);
+
 	panelObject->SetSizer(panelObject_sizer);
 
 	m_bookCtrl->AddPage(panelObject, wxT("Add Objects"), false);
@@ -558,9 +623,10 @@ void AnimatorPanel::render(wxDC& dc) {
 
 	scene->Draw(cur_img, true);
 
+	cur_img.removeAlpha();
 	static int nbcalls = -1; nbcalls++;
 	if (nbcalls == 0 || screenImage.GetWidth() != W || screenImage.GetHeight() != H) {
-		screenImage = wxImage(W, H, &(cur_img.pixels[0]), true);
+		screenImage = wxImage(W, H, &(cur_img.imgNoAlpha[0]), true);
 	}
 
 	bmpBuf = wxBitmap(screenImage/*, dc*/);

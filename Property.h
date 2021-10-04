@@ -7,18 +7,60 @@
 #include <wx/clrpicker.h>
 #include <wx/colordlg.h>
 #include "ClickableColourPicker.h"
+#include "ClickableFilePicker.h"
+#include "wx/filepicker.h"
 #include <wx/spinctrl.h>
 #include "wx/listctrl.h"
 #include "spinRegex.h"
 #include "wx/event.h"
 #include <map>
 #include "Vector.h"
-
+#include <fstream>
 
 static int controlID = 500;
 
 void RGB2LAB(int R_value, int G_value, int B_value, double *Lab);
 void LAB2RGB(double* Lab, unsigned char& R, unsigned char& G, unsigned char& B);
+
+class PositionProperty;
+class FloatProperty;
+class IntProperty;
+class ColorProperty;
+class VerticesListProperty;
+class BoolProperty;
+class ExprProperty;
+class FilenameProperty;
+class PointSetProperty;
+
+class Points {
+public:
+	Points() : dim(0){}
+	void clear() { coords.clear(); }
+	void reserve(size_t n) { coords.reserve(n); }
+	int npoints() const { return coords.size() / dim; };
+	std::vector<float> coords;
+	int dim;
+
+	friend std::ostream& operator<<(std::ostream& os, const Points& v) {
+		os << v.dim << std::endl;
+		os << v.coords.size() << std::endl;
+		for (int i=0; i< v.coords.size(); i++)
+			os << v.coords[i] << " ";
+		return os;
+	}
+	friend std::istream& operator>>(std::istream& is, Points& v) {
+		is >> v.dim;
+		int s;
+		is >> s;
+		v.coords.resize(s);
+		for (int i = 0; i < s; i++) {
+			is >> v.coords[i];
+		}
+		return is;
+	}
+};
+
+
 
 template<typename T>
 class Interpolator {
@@ -79,9 +121,31 @@ public:
 	bool hasKeyframe(float time) const {
 		return (values.find(time) != values.end());
 	}
+	friend std::ostream& operator<<(std::ostream& os, const Interpolator<T>& v) {
+		os << v.values.size() << std::endl;
+		for (typename std::map<float, T>::const_iterator it = v.values.begin(); it != v.values.cend(); ++it)
+			os << it->first << " " << it->second << std::endl;
+		os << v.displayValue;
+		return os;
+	}
+	friend std::istream& operator>>(std::istream& is, Interpolator<T>& ve) {
+		int nvalues;
+		is >> nvalues;
+		for (int i = 0; i < nvalues; i++) {
+			float fl;
+			T v;
+			is >> fl;
+			is >> v;
+			ve.values[fl] = v;
+		}
+		is >> ve.displayValue;
+		return is;
+	}
 	std::map<float, T> values;
 	T displayValue;
 };
+
+
 
 template<>
 const Expr Interpolator<Expr>::getValue(float time) const {
@@ -185,19 +249,62 @@ const VerticesList Interpolator<VerticesList>::getValue(float time) const {
 	}
 };
 
+template<>
+const Points Interpolator<Points>::getValue(float time) const {
+	if (values.size() == 0) return displayValue;
+	typename std::map<float, Points>::const_iterator it = find_last_key(time);
+	if (time <= it->first) return it->second;
+	typename std::map<float, Points>::const_iterator nextit = next(it);
+	if (nextit == values.end()) {
+		return it->second;
+	}
+	if (it != values.end()) {
+		Points e = it->second;
+		Points ne = nextit->second;
+		Points res;
+		float f = (time - it->first) / (nextit->first - it->first);
+		res.dim = std::min(e.dim, ne.dim);
+		int npts = std::min(e.npoints(), ne.npoints());
+		res.reserve(res.dim*npts);
+		for (int i = 0; i < npts; i++) {
+			for (int j = 0; j < res.dim; j++) {
+				res.coords.push_back(e.coords[i*e.dim+j] * (1.f - f) + ne.coords[i*ne.dim+j] * f);
+			}
+		}		
+		return res;
+	}
+};
+
 class Property {
 public:
+	Property(std::string type = "") :propType(type) {};
 	virtual void CreateWidgets(float time) = 0;
 	virtual void UpdateWidgets(float time) = 0;
 	virtual void UpdateParameterFromWidget(float time) = 0;
 	virtual void UpdateInternalTime(float time) {};
 	virtual void addKeyframe(float time) = 0;
 	virtual void SetWidgetsNull() = 0;
+	virtual void print(std::ostream& os) const = 0;
+	virtual void read(std::istream& is) = 0;
+
+	friend std::istream& operator>>(std::istream& is, Property& v) {
+		v.read(is);
+		return is;
+	}
+
+	friend std::ostream& operator<<(std::ostream& os, const Property& v) {
+		v.print(os);
+		return os;
+	}
+	std::string propType;
 };
+
+std::ostream& operator<<(std::ostream& os, const Property* v);
+std::istream& operator>>(std::istream& is, Property* &v);
 
 class PositionProperty : public Property {
 public :
-	PositionProperty(Vec2s defaultPosition = Vec2s("0", "0")) : position(defaultPosition), name("Position"){};
+	PositionProperty(Vec2s defaultPosition = Vec2s("0", "0")) : position(defaultPosition), name("Position"), Property("PositionProperty"){};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		Vec2s v = position.getDisplayValue();
@@ -264,6 +371,19 @@ public :
 		propFloat1 = NULL;
 		propFloat2 = NULL;
 	}
+	virtual void print(std::ostream& os) const {
+		os << name << std::endl;
+		os << position;		
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			name = std::string(line);
+		} while (name == "");
+		is >> position;
+	}
+
 	Interpolator<Vec2s> position;
 	SpinRegex *propFloat1, *propFloat2;
 	std::string name;
@@ -271,7 +391,7 @@ public :
 
 class FloatProperty : public Property {
 public:
-	FloatProperty(Expr defaultValue = Expr("1")) : value(defaultValue), minVal(-100.f), maxVal(100.f), step(0.05f), name("Scale") {};
+	FloatProperty(Expr defaultValue = Expr("1")) : value(defaultValue), minVal(-100.f), maxVal(100.f), step(0.05f), name("Scale"), Property("FloatProperty") {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		Expr v = value.getDisplayValue();
@@ -315,7 +435,22 @@ public:
 	void SetWidgetsNull() {
 		propFloat1 = NULL;
 	}
-
+	virtual void print(std::ostream& os) const {
+		os << name << std::endl;
+		os << value << std::endl;
+		os << minVal<<" "<<maxVal<<" "<<step;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			name = std::string(line);
+		} while (name == "");
+		is >> value;
+		is >> minVal;
+		is >> maxVal; 
+		is >> step;
+	}
 	Interpolator<Expr> value;
 	SpinRegex *propFloat1;
 	std::string name;
@@ -324,7 +459,7 @@ public:
 
 class IntProperty : public Property {
 public:
-	IntProperty(int defaultValue = 0) : value(defaultValue), minVal(0), maxVal(100), name("Nb X ticks") {};
+	IntProperty(int defaultValue = 0) : value(defaultValue), minVal(0), maxVal(100), name("Nb X ticks"), Property("IntProperty") {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		int v = value.getDisplayValue();
@@ -342,7 +477,7 @@ public:
 	}
 	//float eval(float time) const { return eval_string(value.getValue(time).coords[0], time); }
 	void setValue(float time, int val) { return value.setValue(time, val); }
-	void setDefaults(std::string name, int minVal, int maxVal) { this->minVal = minVal; this->maxVal = maxVal; this->name = name;  };
+	void setDefaults(std::string name, int minVal, int maxVal, int curVal = 0) { this->minVal = minVal; this->maxVal = maxVal; this->name = name;  };
 
 	virtual void addKeyframe(float time) {
 		value.setValue(time, getDisplayValue(time));
@@ -356,7 +491,21 @@ public:
 	void SetWidgetsNull() {
 		propInt = NULL;
 	}
-
+	virtual void print(std::ostream& os) const {
+		os << name << std::endl;
+		os << value << std::endl;
+		os << minVal << " " << maxVal;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			name = std::string(line);
+		} while (name == "");
+		is >> value;
+		is >> minVal;
+		is >> maxVal;
+	}
 	Interpolator<int> value;
 	wxSpinCtrl *propInt;
 	std::string name;
@@ -366,7 +515,7 @@ public:
 
 class ColorProperty : public Property {
 public:
-	ColorProperty(const Vec3u& defaultColor = Vec3u(0,0,0), std::string propertyName = "Color"):color(defaultColor), propertyName(propertyName){};
+	ColorProperty(const Vec3u& defaultColor = Vec3u(0,0,0), std::string propertyName = "Color"):color(defaultColor), propertyName(propertyName), Property("ColorProperty") {};
 	void setName(std::string propertyName) { this->propertyName = propertyName; }
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
@@ -404,7 +553,18 @@ public:
 	void SetWidgetsNull() {
 		colorPicker = NULL;
 	}
-
+	virtual void print(std::ostream& os) const {
+		os << propertyName << std::endl;
+		os << color;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			propertyName = std::string(line);
+		} while (propertyName == "");
+		is >> color;
+	}
 	Interpolator<Vec3u> color;
 	std::string propertyName;
 	ClickableColourPicker *colorPicker;
@@ -413,7 +573,7 @@ public:
 
 class VerticesListProperty : public Property {
 public:
-	VerticesListProperty(){};
+	VerticesListProperty(): Property("VerticesListProperty"){};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		if (!propListVertices) return;		
@@ -478,13 +638,19 @@ public:
 	virtual void UpdateInternalTime(float time) {
 		vertices.setDisplayValue(vertices.getValue(time));
 	}
+	virtual void print(std::ostream& os) const {
+		os << vertices;
+	}
+	virtual void read(std::istream& is) {
+		is >> vertices;
+	}
 	Interpolator<VerticesList> vertices;
 	wxListCtrl* propListVertices;
 };
 
 class BoolProperty : public Property {
 public:
-	BoolProperty(bool defaultValue = true) : value(defaultValue), name("Visible") {};
+	BoolProperty(bool defaultValue = true) : value(defaultValue), name("Visible"), Property("BoolProperty") {};
 
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
@@ -512,6 +678,18 @@ public:
 	void SetWidgetsNull() {
 		propBool = NULL;
 	}
+	virtual void print(std::ostream& os) const {
+		os << name << std::endl;
+		os << value;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			name = std::string(line);
+		} while (name == "");
+		is >> value;
+	}
 	Interpolator<bool> value;
 	std::string name;
 	wxCheckBox* propBool;
@@ -520,7 +698,7 @@ public:
 
 class ExprProperty : public Property {
 public:
-	ExprProperty(std::string defaultValue = "x") : value(defaultValue){};
+	ExprProperty(std::string defaultValue = "x") : value(defaultValue), Property("ExprProperty") {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		std::string v = value.getDisplayValue();
@@ -555,7 +733,178 @@ public:
 	void SetWidgetsNull() {
 		propString = NULL;
 	}
-
+	virtual void print(std::ostream& os) const {
+		os << value;
+	}
+	virtual void read(std::istream& is) {
+		is >> value;
+	}
 	Interpolator<std::string> value;
 	wxTextCtrl *propString;
+};
+
+class FilenameProperty : public Property {
+public:
+	FilenameProperty(std::string defaultValue = "", std::string fileName = "File") :filename(defaultValue), propertyName(propertyName), Property("FilenameProperty") {};
+	void setName(std::string propertyName) { this->propertyName = propertyName; }
+	virtual void CreateWidgets(float time);
+	virtual void UpdateWidgets(float time) {
+		if (!filePicker) return;
+		std::string fil = filename.getDisplayValue();
+		filePicker->SetFileName(wxFileName(fil));
+		if (filename.hasKeyframe(time))
+			filePicker->SetBackgroundColour(wxColour(255, 0, 0));
+		else
+			filePicker->SetBackgroundColour(wxColour(255, 255, 255));
+	};
+
+	//Vec3u eval(float time) const { return color.getValue(time); }
+	void setValue(float time, const std::string &value) { filename.setValue(time, value); }
+
+	virtual void UpdateParameterFromWidget(float time) {
+		std::string name = filePicker->GetFileName().GetFullPath().ToStdString();
+		filename.setDisplayValue(name);
+	}
+	std::string getDisplayValue(float time) const {
+		return filename.getDisplayValue();
+	}
+	void setDisplayValue(const std::string &val) {
+		return filename.setDisplayValue(val);
+	}
+	void addKeyframe(float time, const std::string &val) {
+		setValue(time, val);
+	}
+	virtual void addKeyframe(float time) {
+		setValue(time, getDisplayValue(time));
+	}
+	virtual void UpdateInternalTime(float time) {
+		filename.setDisplayValue(filename.getValue(time));
+	}
+	void SetWidgetsNull() {
+		filePicker = NULL;
+	}
+	virtual void print(std::ostream& os) const {
+		os << propertyName << std::endl;
+		os << filename;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			propertyName = std::string(line);
+		} while (propertyName == "");
+		is >> filename;
+	}
+	Interpolator<std::string> filename;
+	std::string propertyName;
+	ClickableFilePicker  *filePicker;
+};
+
+class PointSetProperty : public Property {
+public:
+	PointSetProperty() : Property("PointSetProperty") {};
+	void setName(std::string propertyName) { this->propertyName = propertyName; }
+
+	virtual void CreateWidgets(float time);
+	virtual void UpdateWidgets(float time) {
+		if (!filePicker) return;
+		std::string fil = filename.getDisplayValue();
+		filePicker->SetFileName(wxFileName(fil));
+		if (filename.hasKeyframe(time))
+			filePicker->SetBackgroundColour(wxColour(255, 0, 0));
+		else
+			filePicker->SetBackgroundColour(wxColour(255, 255, 255));
+	};
+	
+	Points load(std::string fname)  {
+		FILE *f = fopen(fname.c_str(), "r+");
+		Points pts;
+		if (!f) return pts;
+		
+		char line[4096];
+		if (!fgets(line, 4096, f)) return pts;
+		int offset;
+		char* lineptr = line;
+		pts.dim = 0;
+		float v;
+		int read = 1;
+		while (read == 1) {
+			read = sscanf(lineptr, "%f%n", &v, &offset);
+			lineptr = lineptr + offset;
+			if (read == 1)
+				pts.dim++;
+		}
+		fclose(f);
+		pts.clear();
+		pts.reserve(100 * pts.dim);
+		f = fopen(fname.c_str(), "r+");
+		while (!feof(f)) {
+
+			char* lineptr = line;
+			if (!fgets(line, 255, f)) break;
+			float v;
+			float v1, v2;
+			for (int i = 0; i < pts.dim; i++) {
+				int offset;
+				int ret = sscanf(lineptr, "%f%n", &v, &offset);
+				if (ret==1)
+					pts.coords.push_back(v);
+				lineptr = lineptr + offset;
+			}
+		}
+		fclose(f);
+		return pts;
+	}
+
+	void setValue(float time, const std::string &value) { 
+		filename.setValue(time, value); 
+		points.setValue(time, load(value));
+	}
+
+	virtual void UpdateParameterFromWidget(float time) {
+		std::string name = filePicker->GetFileName().GetFullPath().ToStdString();
+		filename.setDisplayValue(name);
+		points.setDisplayValue(load(name));
+	}
+
+	Points getDisplayValue(float time) const {
+		return points.getDisplayValue();
+	}
+	void setDisplayValue(const std::string &fname) {
+		filename.setDisplayValue(fname);
+		return points.setDisplayValue(load(fname));
+	}
+	void addKeyframe(float time, const std::string &fname) {
+		setValue(time, fname);
+	}
+	virtual void addKeyframe(float time) {
+		setValue(time, filename.getDisplayValue());
+	}
+	virtual void UpdateInternalTime(float time) {
+		points.setDisplayValue(points.getValue(time));
+		filename.setDisplayValue(filename.getValue(time));
+	}
+	void SetWidgetsNull() {
+		filePicker = NULL;
+	}
+
+	virtual void print(std::ostream& os) const {
+		os << propertyName << std::endl;
+		os << filename << std::endl;
+		os << points;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			propertyName = std::string(line);
+		} while (propertyName == "");
+		is >> filename;
+		is >> points;
+	}
+
+	Interpolator<std::string> filename;
+	Interpolator<Points> points;
+	std::string propertyName;
+	ClickableFilePicker  *filePicker;
 };

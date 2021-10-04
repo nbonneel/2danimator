@@ -21,6 +21,9 @@ class AnimatorFrame : public wxFrame  // the main window
 public:
 	AnimatorFrame();
 	void ExportSequence(wxCommandEvent &evt);	
+	void SaveScene(wxCommandEvent &evt);
+	void LoadScene(wxCommandEvent &evt);
+	void ClearScene();
 
 private:
 
@@ -68,6 +71,8 @@ public:
 		spinCtrlMenu.Append(57, "Add Keyframe");
 		colorCtrlMenu.Append(58, "Add Keyframe");
 		textCtrlMenu.Append(59, "Add Keyframe");
+		filenameCtrlMenu.Append(60, "Add Keyframe");
+		
 		
 
 		//polygonMenu.Connect(wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddVtxPopupClick), this, this);
@@ -82,6 +87,7 @@ public:
 		Connect(57, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddKeyframePointPopupClick), this, this);
 		Connect(58, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddColorKeyframePointPopupClick), this, this);
 		Connect(59, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddTextKeyframePointPopupClick), this, this);
+		Connect(60, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(AnimatorPanel::OnAddFilenameKeyframePointPopupClick), this, this);
 		
 		
 		//s.Add(new Disk(Vec2f(0, 0), 20, Vec3u(0, 0, 255)));
@@ -167,6 +173,9 @@ public:
 
 	void OnAddTextKeyframePointPopupClick(wxCommandEvent &evt);
 
+	void OnAddFilenameKeyframePointPopupClick(wxCommandEvent &evt);
+	
+
 	void OnBSplineSubdivPopupClick(wxCommandEvent &evt);
 
 	void OnChangePolygonToTextPopupClick(wxCommandEvent &evt);
@@ -193,6 +202,8 @@ public:
 	void textMouseUp(wxMouseEvent &evt);
 
 	void colourMouseUp(wxMouseEvent &evt);
+	
+	void filenameMouseUp(wxMouseEvent &evt);
 
 	void mouseWheel(wxMouseEvent& event) {
 
@@ -215,9 +226,10 @@ public:
 	int moveVtxId, moveCtrlId;
 	Scene* scene;
 	AnimatorApp* animatorApp;
-	wxMenu polygonMenu, changeShapeMenu, splineMenu, spinCtrlMenu, colorCtrlMenu, textCtrlMenu;
+	wxMenu polygonMenu, changeShapeMenu, splineMenu, spinCtrlMenu, colorCtrlMenu, filenameCtrlMenu, textCtrlMenu;
 	std::map<SpinRegex*, Property*> widgetToProperty;
 	std::map<ClickableColourPicker*, Property*> colorwidgetToProperty;
+	std::map<ClickableFilePicker*, Property*> filenamewidgetToProperty;
 	std::map<wxTextCtrl*, Property*> textwidgetToProperty;
 
 	DECLARE_EVENT_TABLE();

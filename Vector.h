@@ -7,12 +7,30 @@
 #include <vector>
 #include <map>
 #include <array>
+#include <sstream>
 
 static inline bool is_letter(char l) {
 	//return !((l <= '9'&& l >= '0') || (l == '.'));  // no, may be operators *, /, -
 	return (l >= 'a' && l <= 'z') || (l >= 'A' && l <= 'Z');
 }
+static const char* ws = " \t\n\r\f\v";
 
+// trim from end of string (right)
+inline std::string& rtrim(std::string& s, const char* t = ws) {
+	s.erase(s.find_last_not_of(t) + 1);
+	return s;
+}
+
+// trim from beginning of string (left)
+inline std::string& ltrim(std::string& s, const char* t = ws) {
+	s.erase(0, s.find_first_not_of(t));
+	return s;
+}
+
+// trim from both ends of string (right then left)
+inline std::string& trim(std::string& s, const char* t = ws) {
+	return ltrim(rtrim(s, t), t);
+}
 static inline std::string replace_variable(const std::string& s, float t, char var = 't') {
 	std::string newstring; newstring.reserve(s.size());
 	for (int j = 0; j < s.size(); j++) {
@@ -69,9 +87,50 @@ public:
 	T operator[](int i) const { return coords[i];}
 	T& operator[](int i) { return coords[i]; }
 
+
 //private:
 	T coords[DIM];
 };
+
+
+template<typename T, int DIM>
+std::ostream& operator<<(std::ostream& os, const Vector<T, DIM>& v) {
+	for (int i = 0; i < DIM; i++)
+		os << v.coords[i] << ";";
+	return os;
+}
+template<int DIM>
+std::ostream& operator<<(std::ostream& os, const Vector<unsigned char, DIM>& v) {
+	for (int i = 0; i < DIM; i++)
+		os << (int)v.coords[i] << ";";
+	return os;
+}
+
+template<typename T, int DIM>
+std::istream& operator>>(std::istream& is, Vector<T, DIM>& v) {
+	for (int i = 0; i < DIM; i++) {
+		std::string s1;
+		std::getline(is, s1, ';');
+		s1 = ltrim(s1);
+		std::stringstream ss(s1);
+		ss >> v.coords[i];
+	}
+	return is;
+}
+template<int DIM>
+std::istream& operator>>(std::istream& is, Vector<unsigned char, DIM>& v) {
+	for (int i = 0; i < DIM; i++) {
+		std::string s1;
+		std::getline(is, s1, ';');
+		s1 = ltrim(s1);
+		std::stringstream ss(s1);
+		int val;
+		ss >> val;
+		v.coords[i] = val;
+	}
+	return is;
+}
+
 
 template<typename T, int DIM>
 class FastVector {
@@ -331,13 +390,28 @@ public:
 		return eval_string(coords[0], t);
 	}
 
+	friend std::ostream& operator<<(std::ostream& os, const Vector<std::string, DIM>& v) {
+		for (int i = 0; i < DIM; i++)
+			os << v.coords[i] << ";";
+		return os;
+	}
 
-
+	friend std::istream& operator>>(std::istream& is, Vector<std::string, DIM>& v) {
+		for (int i = 0; i < DIM; i++) {
+			std::string s1;
+			std::getline(is, s1, ';');
+			s1 = ltrim(s1);
+			v.coords[i] = s1;
+		}
+		return is;
+	}
 };
 
 typedef  Vector<std::string, 1> Expr;
 typedef  Vector<std::string, 2> Vec2s;
 typedef  Vector<std::string, 3> Vec3s;
+
+
 
 static inline Vec2f rotate(const Vec2f& v, float angle) {
 	Vec2f res;
@@ -397,6 +471,37 @@ public:
 		vertices.insert(vertices.begin() + prevVtx+1, v);
 		// contourList ->>>> TODO
 		return *this;
+	}
+	friend std::ostream& operator<<(std::ostream& os, const VerticesList& v) {
+		os << v.vertices.size() << std::endl;
+		for (int i = 0; i < v.vertices.size(); i++)
+			os << v.vertices[i] << std::endl;
+		os << v.contourList.size() << std::endl;
+		for (int i = 0; i < v.contourList.size(); i++)
+			os << v.contourList[i] << " ";
+		os << std::endl;
+		os << v.colors.size() << std::endl;
+		for (int i = 0; i < v.colors.size(); i++)
+			os << v.colors[i];
+		return os;
+	}
+	friend std::istream& operator>>(std::istream& is, VerticesList& v) {
+		int vs;
+		is >> vs;
+		v.vertices.resize(vs);
+		for (int i = 0; i < vs; i++) {
+			is >> v.vertices[i];
+		}
+		is >> vs;
+		v.contourList.resize(vs);
+		for (int i = 0; i < vs; i++) {
+			is >> v.contourList[i];
+		}
+		is >> vs;
+		for (int i = 0; i < vs; i++) {
+			is >> v.colors[i];
+		}
+		return is;
 	}
 	std::vector<Vec2f> vertices;
 	std::vector<int> contourList; // contours from 0 to contourList[0], then contourList[0]+1 to contourList[1] etc.

@@ -229,9 +229,9 @@ namespace lemon {
 		NetworkSimplexSimple(const GR& graph, bool arc_mixing, int nbnodes, ArcsType nb_arcs, size_t maxiters = 0) :
 			_graph(graph),  //_arc_id(graph),
 			_arc_mixing(arc_mixing), _init_nb_nodes(nbnodes), _init_nb_arcs(nb_arcs),
-			MAX(std::numeric_limits<Value>::max()),
+			MAXVAL(std::numeric_limits<Value>::max()),
 			INF(std::numeric_limits<Value>::has_infinity ?
-				std::numeric_limits<Value>::infinity() : MAX)
+				std::numeric_limits<Value>::infinity() : MAXVAL)
 		{
 			// Reset data structures
 			reset();
@@ -354,7 +354,7 @@ namespace lemon {
 		ArcsType stem, par_stem, new_stem;
 		Value delta;
 
-		const Value MAX;
+		const Value MAXVAL;
 
 		ArcsType mixingCoeff;
 
@@ -1493,7 +1493,7 @@ namespace lemon {
 					_pi[_target[in_arc]]) >= 0) continue;
 				findJoinNode();
 				bool change = findLeavingArc();
-				if (delta >= MAX) return false;
+				if (delta >= MAXVAL) return false;
 				changeFlow(change);
 				if (change) {
 					updateTreeStructure();
@@ -1522,7 +1522,7 @@ namespace lemon {
 					iter_number++;
 					findJoinNode();
 					bool change = findLeavingArc();
-					if (delta >= MAX) return UNBOUNDED;
+					if (delta >= MAXVAL) return UNBOUNDED;
 					changeFlow(change);
 					if (change) {
 						updateTreeStructure();

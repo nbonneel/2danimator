@@ -109,6 +109,48 @@ void ColorProperty::CreateWidgets(float time) {
 	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
 }
 
+void FilenameProperty::CreateWidgets(float time) {
+	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, propertyName);
+	property_sizer->Add(spacing_text, 0, wxEXPAND);
+	controlID++;
+
+	//unsigned char* u = (unsigned char*)shape->parameters[i]->firstParam + num_param;
+	std::string fname = filename.getValue(time);
+	filePicker = new ClickableFilePicker(myApp->propertiesPanel, controlID, fname, wxFileSelectorPromptStr, "*.*", wxDefaultPosition, wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
+	filePicker->Bind(wxEVT_FILEPICKER_CHANGED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
+	filePicker->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::filenameMouseUp, myApp->animatorPanel);
+
+	myApp->animatorPanel->filenamewidgetToProperty[filePicker] = this;
+
+	controlID++;
+	property_sizer->Add(filePicker, 1, wxEXPAND);
+
+	property_sizer->Layout();
+	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+}
+void PointSetProperty::CreateWidgets(float time) {
+	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, propertyName);
+	property_sizer->Add(spacing_text, 0, wxEXPAND);
+	controlID++;
+
+	//unsigned char* u = (unsigned char*)shape->parameters[i]->firstParam + num_param;
+	std::string fname = filename.getValue(time);
+	filePicker = new ClickableFilePicker(myApp->propertiesPanel, controlID, fname, wxFileSelectorPromptStr, "*.*", wxDefaultPosition, wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
+	filePicker->Bind(wxEVT_FILEPICKER_CHANGED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
+	filePicker->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::filenameMouseUp, myApp->animatorPanel);
+
+	myApp->animatorPanel->filenamewidgetToProperty[filePicker] = this;
+
+	controlID++;
+	property_sizer->Add(filePicker, 1, wxEXPAND);
+
+	property_sizer->Layout();
+	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+}
+
+
 void VerticesListProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
 	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, "Vertices");
@@ -274,3 +316,45 @@ double Hue(double q) {
 	}
 }
 
+std::ostream& operator<<(std::ostream& os, const Property* v) {
+	os << v->propType << std::endl;
+	os << *v;
+	return os;
+}
+std::istream& operator>>(std::istream& is, Property* &v) {
+	std::string ptype;
+	do {
+		is >> ptype;
+	} while (ptype == "");
+
+
+	if (ptype == "PositionProperty") {
+		v = new PositionProperty();
+	}
+	if (ptype == "FloatProperty") {
+		v = new FloatProperty();		
+	}
+	if (ptype == "IntProperty") {
+		v = new IntProperty();		
+	}
+	if (ptype == "ColorProperty") {
+		v = new ColorProperty();		
+	}
+	if (ptype == "VerticesListProperty") {
+		v = new VerticesListProperty();		
+	}
+	if (ptype == "BoolProperty") {
+		v = new BoolProperty();		
+	}
+	if (ptype == "ExprProperty") {
+		v = new ExprProperty();		
+	}
+	if (ptype == "FilenameProperty") {
+		v = new FilenameProperty();		
+	}
+	if (ptype == "PointSetProperty") {
+		v = new PointSetProperty();		
+	}
+	is >> *v;
+	return is;
+}

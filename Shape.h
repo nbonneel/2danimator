@@ -6,6 +6,7 @@
 #include "TextToLines.h"
 #include "Property.h"
 #include <iostream>
+#include <ostream>
 using namespace lemon;
 class Spline;
 
@@ -58,107 +59,78 @@ static inline void drawSquare(Canvas& canvas, int x, int y, int size) {
 	drawBox(canvas, x - size / 2, y - size / 2, x + size / 2, y + size / 2);
 }
 
-// https://rosettacode.org/wiki/Xiaolin_Wu%27s_line_algorithm#C.2B.2B
-static inline void drawLine(Canvas& canvas, int x0, int y0, int x1, int y1, const Vec3u& color = Vec3u(0,0,0), float wd = 1) {
-	auto setPixelColor = [&canvas, &color](int x, int y, float mixing) -> void {
-		if (x<0 || y<0 || x>canvas.W - 1 || y>canvas.H - 1) return;  
-		canvas(x, y, 0) = (unsigned char)(canvas(x, y, 0)*(mixing) + color[0]*(1.f - mixing));
-		canvas(x, y, 1) = (unsigned char)(canvas(x, y, 1)*(mixing) + color[1] * (1.f - mixing));
-		canvas(x, y, 2) = (unsigned char)(canvas(x, y, 2)*(mixing) + color[2] * (1.f - mixing));
+// https://zingl.github.io/bresenham.html
+// https://zingl.github.io/bresenham.c
+
+
+
+
+static inline void drawAntiAliasedLine1old(Canvas& canvas, int x0, int y0, int x1, int y1, const Vec3u& color = Vec3u(0, 0, 0), float wd = 1, bool fill = false) {
+	auto setPixelAA = [&canvas, &color](int x, int y, float mixing) -> void {
+		if (x<0 || y<0 || x>canvas.W - 1 || y>canvas.H - 1) return;
+		canvas(x, y, 0) = (unsigned char)(canvas(x, y, 0)*(mixing / 256.) + color[0] * (1.f - mixing / 256.));
+		canvas(x, y, 1) = (unsigned char)(canvas(x, y, 1)*(mixing / 256.) + color[1] * (1.f - mixing / 256.));
+		canvas(x, y, 2) = (unsigned char)(canvas(x, y, 2)*(mixing / 256.) + color[2] * (1.f - mixing / 256.));
 	};
-	int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-	int dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-	int err = dx - dy, e2, x2, y2;                          /* error value e_xy */
-	float ed = dx + dy == 0 ? 1 : sqrt((float)dx*dx + (float)dy*dy);
-
-	for (wd = (wd + 1) / 2; ; ) {                                   /* pixel loop */
-		setPixelColor(x0, y0, std::max(0.f,abs(err - dx + dy) / ed - wd + 1));
-		e2 = err; x2 = x0;
-		if (2 * e2 >= -dx) {                                           /* x step */
-			for (e2 += dy, y2 = y0; e2 < ed*wd && (y1 != y2 || dx > dy); e2 += dx)
-				setPixelColor(x0, y2 += sy, std::max(0.f, abs(e2) / ed - wd + 1));
-			if (x0 == x1) break;
-			e2 = err; err -= dy; x0 += sx;
-		}
-		if (2 * e2 <= dy) {                                            /* y step */
-			for (e2 = dx - e2; e2 < ed*wd && (x1 != x2 || dx < dy); e2 += dy)
-				setPixelColor(x2 += sx, y0,  std::max(0.f, abs(e2) / ed - wd + 1));
+	auto setPixel = [&canvas, &color](int x, int y) -> void {
+		if (x<0 || y<0 || x>canvas.W - 1 || y>canvas.H - 1) return;
+		canvas(x, y, 0) = color[0];
+		canvas(x, y, 1) = color[1];
+		canvas(x, y, 2) = color[2];
+	};
+	int th = wd * 256;
+	int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+	long dx = abs(x1 - x0), dy = abs(y1 - y0);
+	long err = dx < dy ? dx : dy, e2 = dx < dy ? dy : dx; /* min / max */
+#define BKGD (255L<<16) /* max pixel value = background */
+	//if (th <= 256 || e2 == 0) return plotLineAA(x0, y0, x1, y1); /* assert */
+	e2 = BKGD / (e2 + 2 * err*err*e2 / (4 * e2*e2 + err * err)); /* sqrt approximation */
+	th = (th - 256) << 16; dx *= e2; dy *= e2; /* scale values */
+	if (dx < dy) { /* steep line */
+		x1 = (BKGD + th / 2) / dy; /* start offset */
+		err = x1 * dy - th / 2; /* shift error value to offset width */
+		for (x0 -= x1 * sx; ; y0 += sy) {
+			setPixelAA(x1 = x0, y0, err >> 16); /* aliasing pre-pixel */
+			for (e2 = dy - err - th; e2 + dy < BKGD; e2 += dy)
+				setPixel(x1 += sx, y0); /* pixel on thick line */
+			setPixelAA(x1 + sx, y0, e2 >> 16); /* aliasing post-pixel */
 			if (y0 == y1) break;
-			err += dx; y0 += sy;
+			err += dx; /* y-step */
+			if (err > BKGD) { err -= dy; x0 += sx; } /* x-step */
+		}
+	} else { /* flat line */
+		y1 = (BKGD + th / 2) / dx; /* start offset */
+		err = y1 * dx - th / 2; /* shift error value to offset width */
+		for (y0 -= y1 * sy; ; x0 += sx) {
+			setPixelAA(x0, y1 = y0, err >> 16); /* aliasing pre-pixel */
+			for (e2 = dx - err - th; e2 + dx < BKGD; e2 += dx)
+				setPixel(x0, y1 += sy); /* pixel on thick line */
+			setPixelAA(x0, y1 + sy, e2 >> 16); /* aliasing post-pixel */
+			if (x0 == x1) break;
+			err += dy; /* x-step */
+			if (err > BKGD) { err -= dx; y0 += sy; } /* y-step */
 		}
 	}
-
-	/*auto ipart = [](float x) -> int {return int(std::floor(x)); };
-	auto round = [](float x) -> float {return std::round(x); };
-	auto fpart = [](float x) -> float {return x - std::floor(x); };
-	auto rfpart = [=](float x) -> float {return 1 - fpart(x); };
-	auto plot = [&canvas](int x, int y, float val) -> void {if (x<0 || y<0 || x>canvas.W - 1 || y>canvas.H - 1) return;  canvas(x, y, 0) = val; canvas(x, y, 1) = val;  canvas(x, y, 2) = val; };
-
-	const bool steep = abs(y1 - y0) > abs(x1 - x0);
-	if (steep) {
-		std::swap(x0, y0);
-		std::swap(x1, y1);
-	}
-	if (x0 > x1) {
-		std::swap(x0, x1);
-		std::swap(y0, y1);
-	}
-
-	const float dx = x1 - x0;
-	const float dy = y1 - y0;
-	const float gradient = (dx == 0) ? 1 : dy / dx;
-
-	int xpx11;
-	float intery;
-	{
-		const float xend = round(x0);
-		const float yend = y0 + gradient * (xend - x0);
-		const float xgap = rfpart(x0 + 0.5);
-		xpx11 = int(xend);
-		const int ypx11 = ipart(yend);
-		if (steep) {
-			plot(ypx11, xpx11, rfpart(yend) * xgap);
-			plot(ypx11 + 1, xpx11, fpart(yend) * xgap);
-		} else {
-			plot(xpx11, ypx11, rfpart(yend) * xgap);
-			plot(xpx11, ypx11 + 1, fpart(yend) * xgap);
-		}
-		intery = yend + gradient;
-	}
-
-	int xpx12;
-	{
-		const float xend = round(x1);
-		const float yend = y1 + gradient * (xend - x1);
-		const float xgap = rfpart(x1 + 0.5);
-		xpx12 = int(xend);
-		const int ypx12 = ipart(yend);
-		if (steep) {
-			plot(ypx12, xpx12, rfpart(yend) * xgap);
-			plot(ypx12 + 1, xpx12, fpart(yend) * xgap);
-		} else {
-			plot(xpx12, ypx12, rfpart(yend) * xgap);
-			plot(xpx12, ypx12 + 1, fpart(yend) * xgap);
-		}
-	}
-
-	if (steep) {
-		for (int x = xpx11 + 1; x < xpx12; x++) {
-			plot(ipart(intery), x, rfpart(intery));
-			plot(ipart(intery) + 1, x, fpart(intery));
-			intery += gradient;
-		}
-	} else {
-		for (int x = xpx11 + 1; x < xpx12; x++) {
-			plot(x, ipart(intery), rfpart(intery));
-			plot(x, ipart(intery) + 1, fpart(intery));
-			intery += gradient;
-		}
-	}*/
 }
 
+
+
+static inline void drawAntiAliasedLine1(Canvas& canvas, int x0, int y0, int x1, int y1, const Vec3u& color = Vec3u(0, 0, 0), float wd = 1, bool fill = false) {
+	cairo_t *cr = canvas.cr;
+	cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+	cairo_set_line_width(cr, wd);
+	cairo_move_to(cr, x0, y0);
+	cairo_line_to(cr, x1, y1);
+	cairo_stroke(cr);
+}
+
+void drawAntiAliasedLine(Canvas& canvas, int x0, int y0, int x1, int y1, const Vec3u& color = Vec3u(0, 0, 0), float wd = 1, float tanAlpha0 = 0.0001, float tanAlpha1 = 0.0001);
+
+
+
+
 // border is the normalized outwards half vector with the previous/next edge
-static inline void drawLineForInsidePolyline(Canvas& canvas, int x0, int y0, int x1, int y1, const FastVec2f& border1dir, const FastVec2f& border2dir, const Vec3u& color = Vec3u(0, 0, 0), float wd = 1) {
+/*static inline void drawLineForInsidePolyline(Canvas& canvas, int x0, int y0, int x1, int y1, const FastVec2f& border1dir, const FastVec2f& border2dir, const Vec3u& color = Vec3u(0, 0, 0), float wd = 1) {
 
 	float x0b = x0;
 	float y0b = y0;
@@ -171,26 +143,38 @@ static inline void drawLineForInsidePolyline(Canvas& canvas, int x0, int y0, int
 		b1dir = b1dir / norm(b1dir);
 		b2dir = b1dir;
 	}
-	for (int i = 0; i < wd; i++) {		
-		drawLine(canvas, x0b, y0b, x1b, y1b, color, 1);
+
+	if (wd <= 2) {
+		drawAntiAliasedLine(canvas, x0b, y0b, x1b, y1b, color, wd);
+	} else {
+		drawAntiAliasedLine(canvas, x0b, y0b, x1b, y1b, color, 1);
 		x0b -= b1dir[0];
 		y0b -= b1dir[1];
 		x1b -= b2dir[0];
 		y1b -= b2dir[1];
+		for (int i = 1; i < wd - 1; i++) {
+			drawAntiAliasedLine(canvas, x0b, y0b, x1b, y1b, color, 1, true);
+			x0b -= b1dir[0];
+			y0b -= b1dir[1];
+			x1b -= b2dir[0];
+			y1b -= b2dir[1];
+		}
+		drawAntiAliasedLine(canvas, x0b, y0b, x1b, y1b, color, 1);
 	}
 
-}
+}*/
 
 
 class Shape {
 public:
-	Shape(bool visible = true):visible(visible) {		
+	Shape(std::string type = "", bool visible = true) :shapeType(type), visible(visible) {
 		parameters.push_back((Property*)&this->visible);
 		id = numShapes;
 		numShapes++;
 	};
 	Shape(const Shape& b) {
 		visible = b.visible;
+		shapeType = b.shapeType;
 		parameters.push_back((Property*)&this->visible);
 	}
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const = 0;
@@ -200,16 +184,46 @@ public:
 	virtual Vec2f GetPosition(float time) = 0;
 	virtual void SetScale(float time, float value) = 0;
 	virtual float GetScale(float time) = 0;
+
+	friend std::ostream& operator<<(std::ostream& os, const Shape& v) {
+		os << v.parameters.size() << std::endl;
+		for (int i = 0; i < v.parameters.size(); i++)
+			os << v.parameters[i] << std::endl;
+		os << v.visible << std::endl;
+		os << v.id;
+		return os;
+	}
+	friend std::istream& operator>>(std::istream& is, Shape& v) {
+		int nvalues;
+		is >> nvalues;
+		v.parameters.resize(nvalues);
+		for (int i = 0; i < nvalues; i++) {
+			char line[255];
+			std::string l; // read the parameter type. It should not have changed from the existing parameter set.  => assert(l == v.parameters[i].type)
+			do {
+				is.getline(line, 255);
+				l = std::string(line);
+			} while (l == "");
+			is >> *(v.parameters[i]);
+		}
+		is >> v.visible;
+		is >> v.id;
+		return is;
+	}
+
 	std::vector<Property*> parameters;
 	BoolProperty visible;
 	int id;
+	std::string shapeType;
 	static int numShapes;
 };
 
+std::ostream& operator<<(std::ostream& os, const Shape* v);
+std::istream& operator>>(std::istream& is, Shape* &v);
 
 class Disk : public Shape {
-public: 
-	Disk(const Vec2s& position, std::string radius, const Vec3u &color, const Vec3u &colorEdge, std::string thicknessEdge, bool visible = true):Shape(visible), pos(position), radius(radius), color(color), colorEdge(colorEdge), thicknessEdge(thicknessEdge) {
+public:
+	Disk(const Vec2s& position = Vec2s("0", "0"), std::string radius = "10", const Vec3u &color = Vec3u(255, 0, 0), const Vec3u &colorEdge = Vec3u(0, 0, 255), std::string thicknessEdge = "1", bool visible = true) :Shape("Disk", visible), pos(position), radius(radius), color(color), colorEdge(colorEdge), thicknessEdge(thicknessEdge) {
 		this->colorEdge.setName("Border Color");
 		this->radius.setDefaults("Radius", 0.f, 10000.f, 0.05f);
 		this->thicknessEdge.setDefaults("Edge thickness", 0.f, 1000.f, 1.f);
@@ -221,7 +235,7 @@ public:
 		parameters.push_back((Property*)&this->colorEdge);
 	}
 
-	Disk(const Disk& d) : Shape(true), pos(d.pos), radius(d.radius), color(d.color), colorEdge(d.colorEdge),thicknessEdge(d.thicknessEdge) {
+	Disk(const Disk& d) : Shape(d.shapeType, true), pos(d.pos), radius(d.radius), color(d.color), colorEdge(d.colorEdge), thicknessEdge(d.thicknessEdge) {
 		this->colorEdge.setName("Border Color");
 		this->radius.setDefaults("Radius", 0.f, 10000.f, 0.05f);
 		this->thicknessEdge.setDefaults("Edge thickness", 0.f, 1000.f, 1.f);
@@ -231,7 +245,7 @@ public:
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->thicknessEdge);
 		parameters.push_back((Property*)&this->colorEdge);
-		
+
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
@@ -240,8 +254,8 @@ public:
 		float th = thicknessEdge.getDisplayValue(time);
 		float r2 = sqr(r);
 		float r2i = sqr(r - th);
-		float r2ib = sqr(r - th -1);
-		float r2b = sqr(r +1);
+		float r2ib = sqr(r - th - 1);
+		float r2b = sqr(r + 1);
 		Vec3u color = this->color.getDisplayValue(time);
 		Vec3u colorEdge = this->colorEdge.getDisplayValue(time);
 
@@ -290,6 +304,7 @@ public:
 		if (displayControls) { // draw Bbox
 			drawBox(canvas, p[0] - r, p[1] - r, p[0] + r, p[1] + r);
 		}
+
 	}
 
 	virtual Shape* Clone() {
@@ -338,8 +353,8 @@ public:
 
 class PolygonShape : public Shape { // Polygon already taken in wingdi.h (5127)...
 public:
-	PolygonShape(const Vec2s& position, std::string scale, std::string angle, const Vec3u &color, const Vec3u &edgeColor, std::string edgeThickness, bool visible = true):Shape(visible), pos(position), scale(scale), color(color), angle(angle), edgeColor(edgeColor), edgeThickness(edgeThickness) {
-		
+	PolygonShape(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", std::string angle = "0", const Vec3u &color = Vec3u(255, 0, 0), const Vec3u &edgeColor = Vec3u(0, 0, 255), std::string edgeThickness = "1", bool visible = true) :Shape("PolygonShape", visible), pos(position), scale(scale), color(color), angle(angle), edgeColor(edgeColor), edgeThickness(edgeThickness) {
+
 		this->edgeColor.setName("Edge Color");
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->angle.setDefaults("Angle (rad)", -1000.f, 1000.f, 0.01f);
@@ -353,7 +368,7 @@ public:
 		parameters.push_back((Property*)&this->vertices);
 	}
 
-	PolygonShape(const PolygonShape& d) : Shape(true), pos(d.pos), scale(d.scale), color(d.color),angle(d.angle), vertices(d.vertices), edgeColor(d.edgeColor), edgeThickness(d.edgeThickness) {
+	PolygonShape(const PolygonShape& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), angle(d.angle), vertices(d.vertices), edgeColor(d.edgeColor), edgeThickness(d.edgeThickness) {
 		this->edgeColor.setName("Edge Color");
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->angle.setDefaults("Angle (rad)", -1000.f, 1000.f, 0.01f);
@@ -370,7 +385,7 @@ public:
 	void BSplineSubdivide(float time);
 
 	void addVertex(float time, const Vec2f& v, bool createNewContour = false) {
-		vertices.addVertex(time, v, createNewContour);	
+		vertices.addVertex(time, v, createNewContour);
 	}
 	void insertVertex(float time, const Vec2f& v, int prevVertex) {
 		vertices.insertVertex(time, v, prevVertex);
@@ -379,7 +394,7 @@ public:
 		if (component >= this->vertices.getDisplayValue().contourList.size()) return 0;
 		int start = 0;
 		if (component > 0) {
-			start = this->vertices.getDisplayValue().contourList[component - 1]+1;
+			start = this->vertices.getDisplayValue().contourList[component - 1] + 1;
 		}
 		return this->vertices.getDisplayValue().contourList[component] - start + 1;
 	}
@@ -411,12 +426,12 @@ public:
 
 
 	virtual bool Contains(const Vec2f& initPoint, float s, float a, const Vec2f &p, float time) const {
-		Vec2f point = rotate((initPoint  - p) / s, -a);
+		Vec2f point = rotate((initPoint - p) / s, -a);
 
 		const int X = 0;
 		const int Y = 1;
 		int j, yflag0, yflag1, inside_flag, xflag0;
-		float ty, tx;		
+		float ty, tx;
 		VerticesList vertices = this->vertices.getDisplayValue();
 		const Vec2f *vtx0, *vtx1;
 		const Vec2f* pgon = &vertices.vertices[0];
@@ -466,7 +481,7 @@ public:
 
 			/* move to next pair of vertices, retaining info as possible */
 			vtx0 = vtx1;
-			vtx1 ++;
+			vtx1++;
 
 			if (vtxId == vertices.contourList[numContour]) {
 
@@ -487,7 +502,7 @@ public:
 		return(inside_flag);
 
 
-		#if 0
+#if 0
 		float tx, ty, u0, u1, u2, v0, v1, vx0, vy0, alpha, beta, denom;
 		int inside_flag;
 		const int X = 0;
@@ -658,7 +673,7 @@ public:
 		return(inside_flag);
 #endif
 
-		const int X = 0; 
+		const int X = 0;
 		const int Y = 1;
 		int j, yflag0, yflag1, inside_flag, xflag0;
 		float ty, tx;
@@ -710,7 +725,7 @@ public:
 
 			/* move to next pair of vertices, retaining info as possible */
 			vtx0 = vtx1;
-			vtx1 +=2;
+			vtx1 += 2;
 
 			if (vtxId == vertices.contourList[numContour]) {
 
@@ -728,7 +743,7 @@ public:
 			vtxId++;
 		}
 
-			   return(inside_flag);
+		return(inside_flag);
 	}
 
 	float distFromNearestEdgeForDraw(const FastVec2f& v, const VerticesList& vertices) const {  // s = evaluated scale		
@@ -818,7 +833,7 @@ public:
 		for (int i = 0; i < N; i++) {
 			Vec2f v1 = vertices.vertices[i];
 			float d1 = norm(v - v1);
-			if (d1 < d && d1< searchRadius) {
+			if (d1 < d && d1 < searchRadius) {
 				d = d1;
 				result = i;
 			}
@@ -847,7 +862,7 @@ public:
 			Vec2f v2 = vertices.vertices[i];
 			float absciProj = dot(v - v1, v2 - v1) / norm2(v2 - v1);
 			float d1 = norm(v - v1);
-			float d2 = norm(v - v2);			
+			float d2 = norm(v - v2);
 			if (absciProj <= 0) {  // dist point point
 				if (d1 < d) {
 					d = d1;
@@ -879,14 +894,14 @@ public:
 		float s = scale.getDisplayValue(time);
 		float a = angle.getDisplayValue(time);
 		FastVec2f p(pos.getDisplayValue(time));
-		int minX=1E9, maxX = -1E9, minY = 1E9, maxY = -1E9;
+		int minX = 1E9, maxX = -1E9, minY = 1E9, maxY = -1E9;
 		int N = evalVertices.vertices.size();
 		fastTransformedVertices.resize(N);
 		FastVec2f center(0, 0);
 		for (int i = 0; i < N; i++) {
 			FastVec2f v = rotate(FastVec2f(evalVertices.vertices[i]), a);
 			fastTransformedVertices[i] = v * s + p;
-			center = center+fastTransformedVertices[i];
+			center = center + fastTransformedVertices[i];
 			minX = std::min(minX, (int)(fastTransformedVertices[i][0]));
 			maxX = std::max(maxX, (int)(fastTransformedVertices[i][0]));
 			minY = std::min(minY, (int)(fastTransformedVertices[i][1]));
@@ -894,10 +909,10 @@ public:
 		}
 		center = center / (float)N;
 		int ominX = minX, ominY = minY, omaxX = maxX, omaxY = maxY;
-		minX = std::max(minX-1, 0);
-		maxX = std::min(maxX-1, canvas.W - 1);
-		minY = std::max(minY+1, 0);
-		maxY = std::min(maxY+1, canvas.H - 1);
+		minX = std::max(minX - 1, 0);
+		maxX = std::min(maxX - 1, canvas.W - 1);
+		minY = std::max(minY + 1, 0);
+		maxY = std::min(maxY + 1, canvas.H - 1);
 		float edgeThick = edgeThickness.getDisplayValue(time);
 		const unsigned char* cc = &color.coords[0];
 		if (visible.getDisplayValue()) {
@@ -911,9 +926,9 @@ public:
 							canvas(j, i, 1) = edgeColor[1];
 							canvas(j, i, 2) = edgeColor[2];
 						} else {*/
-							/*canvas(j, i, 0) = color[0];
-							canvas(j, i, 1) = color[1];
-							canvas(j, i, 2) = color[2];*/
+						/*canvas(j, i, 0) = color[0];
+						canvas(j, i, 1) = color[1];
+						canvas(j, i, 2) = color[2];*/
 						memcpy(&canvas(j, i, 0), cc, 3 * sizeof(char));
 						//}
 					} else {
@@ -934,51 +949,26 @@ public:
 			}
 
 			int curContour = 0;
-			for (int i = 0; i < fastTransformedVertices.size(); i++) {
+			cairo_t *cr = canvas.cr;
+			cairo_set_source_rgb(cr, 0, 0, 0);
+			cairo_set_line_width(cr, s*edgeThick);
+			cairo_move_to(cr, fastTransformedVertices[0][0], fastTransformedVertices[0][1]);
+			int initPoint = 0;
+			for (int i = 1; i < fastTransformedVertices.size(); i++) {
 
-				int nextPoint = i + 1;
+				cairo_line_to(cr, fastTransformedVertices[i][0], fastTransformedVertices[i][1]);
+
 				if (i == evalVertices.contourList[curContour]) {
-					if (curContour == 0) {
-						nextPoint = 0;
-					} else {
-						nextPoint = evalVertices.contourList[curContour - 1]+1;
-					}
-				}
-				//drawLine(canvas, fastTransformedVertices[i][0], fastTransformedVertices[i][1], fastTransformedVertices[nextPoint][0], fastTransformedVertices[nextPoint][1], edgeColor, edgeThick);
-
-
-				//drawLine(canvas, fastTransformedVertices[i][0], fastTransformedVertices[i][1], fastTransformedVertices[(i + 1) % N][0], fastTransformedVertices[(i + 1) % N][1], edgeColor, edgeThick);
-				int prevPoint = i - 1; 
-				if (prevPoint == -1) 
-					prevPoint = evalVertices.contourList[0];
-				else 
-					if (curContour > 0 && prevPoint <= evalVertices.contourList[curContour - 1]) {
-						prevPoint = evalVertices.contourList[curContour];
-					}
-				int nextnextPoint = nextPoint + 1;
-				if (nextnextPoint > evalVertices.contourList[curContour]) {
-					if (curContour>=1)
-						nextnextPoint = evalVertices.contourList[curContour - 1] + 1;
-					else
-						nextnextPoint = 1;
-				}
-
-				//FastVec2f v1 = -getNormalized(getNormalized(fastTransformedVertices[nextPoint] - fastTransformedVertices[i]) + getNormalized(fastTransformedVertices[prevPoint] - fastTransformedVertices[i]));
-				//FastVec2f v2 = -getNormalized(getNormalized(fastTransformedVertices[nextnextPoint] - fastTransformedVertices[nextPoint]) + getNormalized(fastTransformedVertices[i] - fastTransformedVertices[nextPoint]));
-				FastVec2f perpprev(-fastTransformedVertices[i][1] + fastTransformedVertices[prevPoint][1], fastTransformedVertices[i][0] - fastTransformedVertices[prevPoint][0]);
-				FastVec2f perp(-fastTransformedVertices[nextPoint][1] + fastTransformedVertices[i][1], fastTransformedVertices[nextPoint][0] - fastTransformedVertices[i][0]);
-				FastVec2f perpnext(-fastTransformedVertices[nextnextPoint][1] + fastTransformedVertices[nextPoint][1], fastTransformedVertices[nextnextPoint][0] - fastTransformedVertices[nextPoint][0]);
-				FastVec2f v1 = getNormalized(perpprev + perp);
-				FastVec2f v2 = getNormalized(perpnext + perp);
-				//if (dot(perp2, v2 - v1) < 1E-5) perp = center - v1;
-				//if (dot(v1, perp) < 0) v1 = -v1;
-				//if (dot(v2, perp2) < 0) v2 = -v2;
-
-				drawLineForInsidePolyline(canvas, fastTransformedVertices[i][0], fastTransformedVertices[i][1], fastTransformedVertices[nextPoint][0], fastTransformedVertices[nextPoint][1], v1, v2, edgeColor, edgeThick*s);
-				if (i == evalVertices.contourList[curContour]) {
+					//cairo_line_to(cr, fastTransformedVertices[initPoint][0], fastTransformedVertices[initPoint][1]);
+					cairo_close_path(cr);
+					initPoint = i + 1;
+					if (i != fastTransformedVertices.size() - 1)
+						cairo_move_to(cr, fastTransformedVertices[i + 1][0], fastTransformedVertices[i + 1][1]);
 					curContour++;
 				}
+
 			}
+			cairo_stroke(cr);
 		}
 
 		if (displayControls) { // draw Bbox
@@ -1026,11 +1016,11 @@ public:
 
 class PolygonMorph : public Shape {
 public:
-	PolygonMorph(PolygonShape* s1 = NULL, PolygonShape* s2 = NULL, std::string t = std::string("0"), bool visible = true) : Shape(visible), s1(s1), s2(s2), t(t) {		
+	PolygonMorph(PolygonShape* s1 = NULL, PolygonShape* s2 = NULL, std::string t = std::string("0"), bool visible = true) : Shape("PolygonMorph", visible), s1(s1), s2(s2), t(t) {
 		this->t.setDefaults("Interpolation time", -100.f, 100.f, 0.05f);
 		parameters.push_back((Property*)&this->t);
 	};
-	PolygonMorph(const PolygonMorph& d) : Shape(true), t(d.t), s1(d.s1), s2(d.s2) {		
+	PolygonMorph(const PolygonMorph& d) : Shape(d.shapeType, true), t(d.t), s1(d.s1), s2(d.s2) {
 		this->t.setDefaults("Interpolation time", -100.f, 100.f, 0.05f);
 		parameters.push_back((Property*)&this->t);
 	}
@@ -1130,7 +1120,7 @@ public:
 			for (int i = 0; i < n1; i++) {
 				Vec2f pt1 = rotate((v1[i] - pos1) / scale1, -angle1);
 				for (int j = 0; j < n2; j++) {
-					double d = norm2(  pt1 - rotate((v2[j] - pos2) / scale2, -angle2));
+					double d = norm2(pt1 - rotate((v2[j] - pos2) / scale2, -angle2));
 					net.setCost(di.arcFromId(idarc), d);
 					idarc++;
 				}
@@ -1157,7 +1147,7 @@ public:
 							dest = v2[j];
 						}
 					}
-					s.addVertex(time, (1.f - tval)*v1[i] + tval * dest / sumAmount, i==0);
+					s.addVertex(time, (1.f - tval)*v1[i] + tval * dest / sumAmount, i == 0);
 				}
 			} else {
 				for (int i = 0; i < n2; i++) {
@@ -1175,7 +1165,7 @@ public:
 							dest = v1[j];
 						}
 					}
-					s.addVertex(time, (1.f - tval)*dest / sumAmount + tval * v2[i], i==0);
+					s.addVertex(time, (1.f - tval)*dest / sumAmount + tval * v2[i], i == 0);
 				}
 			}
 
@@ -1226,8 +1216,8 @@ public:
 };
 
 class Spline : public Shape {
-public: 
-	Spline(const Vec2s& position, std::string scale, const Vec3u &color, bool visible = true, std::string thickness = "1") : Shape(visible), pos(position), scale(scale), color(color), thickness(thickness){
+public:
+	Spline(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string thickness = "1") : Shape("Spline", visible), pos(position), scale(scale), color(color), thickness(thickness) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
 		parameters.push_back((Property*)&this->pos);
@@ -1236,14 +1226,14 @@ public:
 		parameters.push_back((Property*)&this->thickness);
 		parameters.push_back((Property*)&this->controlPoints);
 	}
-	Spline(const Spline& d) : Shape(true), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness){
+	Spline(const Spline& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->thickness);
-		parameters.push_back((Property*)&this->controlPoints);		
+		parameters.push_back((Property*)&this->controlPoints);
 	}
 
 	void addVertex(float time, const Vec2f& v) {
@@ -1304,53 +1294,38 @@ public:
 
 		if (visible.getDisplayValue()) {
 			float edgeThick = thickness.getDisplayValue(time);
-#pragma omp parallel for
+			cairo_t *cr = canvas.cr;
+			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+			cairo_set_line_width(cr, s*edgeThick);
+			Vec2f v = evalBSpline(0.f, evalControlPoints)*s + p;
+			cairo_move_to(cr, v[0], v[1]);
+
 			for (int i = 0; i < 100; i++) {
 				Vec2f v = evalBSpline(i / 100.f, evalControlPoints)*s + p;
-				if (v[0] >= 0 && v[0] <= canvas.W - 1 && v[1] >= 0 && v[1] <= canvas.H - 1) {
-					/*canvas(v[0], v[1], 0) = color[0];
-					canvas(v[0], v[1], 1) = color[1];
-					canvas(v[0], v[1], 2) = color[2];*/
-					Vec2f prevV = evalBSpline((i-1.f) / 100.f, evalControlPoints)*s + p;
-					Vec2f nextV = evalBSpline((i + 1.f) / 100.f, evalControlPoints)*s + p;
-					Vec2f nextnextV = evalBSpline((i + 2.f) / 100.f, evalControlPoints)*s + p;
-					FastVec2f perpprev(-v[1] + prevV[1], v[0] - prevV[0]);
-					FastVec2f perp(-nextV[1] + v[1], nextV[0] - v[0]);
-					FastVec2f perpnext(-nextnextV[1] + nextV[1], nextnextV[0] - nextV[0]);
-					FastVec2f v1 = getNormalized(perpprev + perp);
-					FastVec2f v2 = getNormalized(perpnext + perp);
-					//if (dot(perp2, v2 - v1) < 1E-5) perp = center - v1;
-
-					drawLineForInsidePolyline(canvas, v[0], v[1], nextV[0], nextV[1], v1, v2, color, edgeThick*s);
-
+				if (i >= 1) {
+					Vec2f v0 = evalBSpline((i - 0.66) / 100.f, evalControlPoints)*s + p;
+					Vec2f v1 = evalBSpline((i - 0.33) / 100.f, evalControlPoints)*s + p;
+					cairo_curve_to(cr, v0[0], v0[1], v1[0], v1[1], v[0], v[1]);
+				} else {
+					cairo_line_to(cr, v[0], v[1]);
 				}
 			}
+			cairo_stroke(cr);
 		}
 
 		if (displayControls) { // draw Bbox
 			drawBox(canvas, ominX, ominY, omaxX, omaxY);
 			int N = evalControlPoints.vertices.size();
-			for (int i = 0; i < N-1; i++) {
-				FastVec2f pp = evalControlPoints.vertices[i] * s + p;
-				FastVec2f pn = evalControlPoints.vertices[i+1] * s + p;
-				FastVec2f dir1 = getNormalized(pn - pp);
-				FastVec2f v1;
-				if (i >= 1) {
-					FastVec2f pm = evalControlPoints.vertices[i-1] * s + p;
-					v1 = dir1 + getNormalized(pm - pp);
-				} else
-					v1 = FastVec2f(-dir1[1], dir1[0]);
-				v1 = -getNormalized(v1);
-				FastVec2f v2;
-				if (i < N - 2) {
-					FastVec2f ppp = evalControlPoints.vertices[i +2] * s + p;
-					v2 = getNormalized(ppp - pp) + getNormalized(pp - pn);
-				} else {
-					v2 = FastVec2f(-dir1[1], dir1[0]);
-				}
-				v2 = -getNormalized(v2);
-				drawLineForInsidePolyline(canvas, pp[0], pp[1], pn[0], pn[1], v1, v2, Vec3u(0,0,0), 2);
+			cairo_t *cr = canvas.cr;
+			Vec2f v = evalControlPoints.vertices[0] * s + p;
+			cairo_set_source_rgb(cr, 0.f, 0.f, 0.f);
+			cairo_set_line_width(cr, 1.f);
+			cairo_move_to(cr, v[0], v[1]);
+			for (int i = 1; i < N; i++) {
+				Vec2f v = evalControlPoints.vertices[i] * s + p;
+				cairo_line_to(cr, v[0], v[1]);
 			}
+			cairo_stroke(cr);
 			for (int i = 0; i < evalControlPoints.vertices.size(); i++) {
 				Vec2f pp = evalControlPoints.vertices[i] * s + p;
 				drawSquare(canvas, pp[0], pp[1], 5);
@@ -1368,7 +1343,7 @@ public:
 		Vec2f p = pos.getDisplayValue(time);
 		float d = 1E9;
 		for (int i = 0; i < 50; i++) {
-			d = std::min(d, norm2(evalBSpline(i / 50.f, controlPoints)*s+p - initPoint));
+			d = std::min(d, norm2(evalBSpline(i / 50.f, controlPoints)*s + p - initPoint));
 		}
 		d = sqrt(d);
 		if (d < 5) return true;
@@ -1386,7 +1361,7 @@ public:
 		int N = controlPoints.vertices.size();
 		int result;
 		int curContour = 0;
-		for (int i = 0; i < N-1; i++) {
+		for (int i = 0; i < N - 1; i++) {
 			int nextPoint = i + 1;
 			if (i == controlPoints.contourList[curContour]) {
 				/*if (curContour == 0) {
@@ -1450,7 +1425,7 @@ public:
 		return pos.getDisplayValue(time);
 	}
 	virtual void SetScale(float time, float value) {
-		scale.setDisplayValue(std::to_string(value));  
+		scale.setDisplayValue(std::to_string(value));
 	}
 	virtual float GetScale(float time) {
 		return scale.getDisplayValue(time);
@@ -1464,7 +1439,7 @@ public:
 
 class Plotter1D : public Shape {
 public:
-	Plotter1D(const Vec2s& position, std::string scale, const Vec3u &color, bool visible = true, std::string thickness = "1") : Shape(visible), pos(position), scale(scale), color(color), thickness(thickness), XExtent(Vec2s("0","1")), YExtent(Vec2s("0", "1")), axisXVisible(true), axisYVisible(true), xticks(5), yticks(5), showGrid(true){
+	Plotter1D(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string thickness = "1") : Shape("Plotter1D", visible), pos(position), scale(scale), color(color), thickness(thickness), XExtent(Vec2s("0", "1")), YExtent(Vec2s("0", "1")), axisXVisible(true), axisYVisible(true), xticks(5), yticks(5), showGrid(true) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
 		this->XExtent.name = "X Range";
@@ -1489,7 +1464,7 @@ public:
 		parameters.push_back((Property*)&this->thickness);
 
 	}
-	Plotter1D(const Plotter1D& d) : Shape(true), pos(d.pos), scale(d.scale), color(d.color), expression(d.expression), thickness(d.thickness), XExtent(d.XExtent), YExtent(d.YExtent), axisXVisible(d.axisXVisible), axisYVisible(d.axisYVisible), xticks(d.xticks), yticks(d.yticks), showGrid(d.showGrid){
+	Plotter1D(const Plotter1D& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), expression(d.expression), thickness(d.thickness), XExtent(d.XExtent), YExtent(d.YExtent), axisXVisible(d.axisXVisible), axisYVisible(d.axisYVisible), xticks(d.xticks), yticks(d.yticks), showGrid(d.showGrid) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
 		this->XExtent.name = "X Range";
@@ -1511,7 +1486,7 @@ public:
 		parameters.push_back((Property*)&this->scale);
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->thickness);
-		
+
 	}
 
 	Vec2f evalExpr(float t, const Vec2f &position, const Vec2f &relativeCenter, const Vec2f &xRange, const Vec2f &yRange, float s, float time) const {
@@ -1522,7 +1497,7 @@ public:
 
 		float value = ceval_result2(newstring2);
 
-		return Vec2f((t-xRange[0]) / (xRange[1] - xRange[0]) *200, -((value - yRange[0]) /(yRange[1]-yRange[0]) )*200)*s + position - relativeCenter;
+		return Vec2f((t - xRange[0]) / (xRange[1] - xRange[0]) * 200, -((value - yRange[0]) / (yRange[1] - yRange[0])) * 200)*s + position - relativeCenter;
 	}
 
 
@@ -1544,6 +1519,10 @@ public:
 			float edgeThick = thickness.getDisplayValue(time);
 			bool showgrid = showGrid.getDisplayValue();
 
+			cairo_t *cr = canvas.cr;
+			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+			cairo_set_line_width(cr, s);
+
 			unsigned char black[3] = { 0,0,0 };
 			unsigned char lightgrey[3] = { 230,230,230 };
 			float xscale = 200 * s / (xrange[1] - xrange[0]);
@@ -1554,11 +1533,11 @@ public:
 						std::string label = to_string_with_precision(i, 2);
 						TextToLine::drawText(label, canvas, &black[0], x0 + i * xscale - 3 * s*label.size(), y0 + 15 * s, 3 * s);
 						if (showgrid)
-							drawLine(canvas, x0 + i * xscale, position[1] - relativeCenter[1], x0 + i * xscale, position[1] - 200 * s - relativeCenter[1], Vec3u(lightgrey[0], lightgrey[1], lightgrey[2]), s);
-						drawLine(canvas, x0 + i * xscale, y0 - 3 * s, x0 + i * xscale, y0 + 3 * s, Vec3u(0, 0, 0), s);
+							drawAntiAliasedLine1(canvas, x0 + i * xscale, position[1] - relativeCenter[1], x0 + i * xscale, position[1] - 200 * s - relativeCenter[1], Vec3u(lightgrey[0], lightgrey[1], lightgrey[2]), s);
+						drawAntiAliasedLine1(canvas, x0 + i * xscale, y0 - 3 * s, x0 + i * xscale, y0 + 3 * s, Vec3u(0, 0, 0), s);
 					}
 				}
-				
+
 			}
 
 
@@ -1569,41 +1548,41 @@ public:
 						std::string label = to_string_with_precision(i, 2);
 						TextToLine::drawText(label, canvas, &black[0], x0 - 10 - 5 * s*label.size(), y0 - i * 200 * s / (yrange[1] - yrange[0]) + 3 * s, 3 * s);
 						if (showgrid)
-							drawLine(canvas, position[0] - relativeCenter[0], y0 - i * 200 * s / (yrange[1] - yrange[0]), position[0] + 200 * s - relativeCenter[0], y0 - i * 200 * s / (yrange[1] - yrange[0]), Vec3u(lightgrey[0], lightgrey[1], lightgrey[2]), s);
-						drawLine(canvas, x0 - 3 * s, y0 - i * 200 * s / (yrange[1] - yrange[0]), x0 + 3 * s, y0 - i * 200 * s / (yrange[1] - yrange[0]), Vec3u(0, 0, 0), s);
+							drawAntiAliasedLine1(canvas, position[0] - relativeCenter[0], y0 - i * 200 * s / (yrange[1] - yrange[0]), position[0] + 200 * s - relativeCenter[0], y0 - i * 200 * s / (yrange[1] - yrange[0]), Vec3u(lightgrey[0], lightgrey[1], lightgrey[2]), s);
+						drawAntiAliasedLine1(canvas, x0 - 3 * s, y0 - i * 200 * s / (yrange[1] - yrange[0]), x0 + 3 * s, y0 - i * 200 * s / (yrange[1] - yrange[0]), Vec3u(0, 0, 0), s);
 					}
 				}
-				drawLine(canvas, x0, position[1] - relativeCenter[1], x0, position[1] - 200 * s - relativeCenter[1], Vec3u(0, 0, 0), s);
+				drawAntiAliasedLine1(canvas, x0, position[1] - relativeCenter[1], x0, position[1] - 200 * s - relativeCenter[1], Vec3u(0, 0, 0), s);
 			}
 			if (axisXVisible.getDisplayValue() && std::ceil(yrange[0]) <= 0 && std::floor(yrange[1]) >= 0) { // draws the axis /after/ the grid, if any
 				//drawLine(canvas, position[0] - 100 * s - relativeCenter[0], y0, position[0] + 100 * s - relativeCenter[0], y0, Vec3u(0, 0, 0), s);
-				drawLine(canvas, position[0] - relativeCenter[0], y0, position[0] + 200 * s - relativeCenter[0], y0, Vec3u(0, 0, 0), s);
+				drawAntiAliasedLine1(canvas, position[0] - relativeCenter[0], y0, position[0] + 200 * s - relativeCenter[0], y0, Vec3u(0, 0, 0), s);
 			}
 
+			const int Ndisc = 300;
+			float invNdisc = 1.f / (float)Ndisc;
 
-#pragma omp parallel for
-			for (int i = 0; i < 100; i++) {
-				Vec2f v = evalExpr(i / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
-				if (v[0] >= 0 && v[0] <= canvas.W - 1 && v[1] >= 0 && v[1] <= canvas.H - 1) {
-					/*canvas(v[0], v[1], 0) = color[0];
-					canvas(v[0], v[1], 1) = color[1];
-					canvas(v[0], v[1], 2) = color[2];*/
-					Vec2f prevV = evalExpr((i-1.f) / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
-					Vec2f nextV = evalExpr((i + 1.f) / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
-					Vec2f nextnextV = evalExpr((i + 2.f) / 100.f*(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
-					FastVec2f perpprev(-v[1] + prevV[1], v[0] - prevV[0]);
-					FastVec2f perp(-nextV[1] + v[1], nextV[0] - v[0]);
-					FastVec2f perpnext(-nextnextV[1] + nextV[1], nextnextV[0] - nextV[0]);
-					FastVec2f v1 = getNormalized(perpprev + perp);
-					FastVec2f v2 = getNormalized(perpnext + perp);
-					//if (dot(perp2, v2 - v1) < 1E-5) perp = center - v1;
 
-					drawLineForInsidePolyline(canvas, v[0], v[1], nextV[0], nextV[1], v1, v2, color, edgeThick*s);
+			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+			cairo_set_line_width(cr, s*edgeThick);
+			Vec2f v = evalExpr(0 * invNdisc *(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+			cairo_move_to(cr, v[0], v[1]);
 
+			for (int i = 0; i < Ndisc; i++) {
+				Vec2f v = evalExpr(i *invNdisc *(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+				if (i > 1) {
+					Vec2f v0 = evalExpr((i - 0.66) *invNdisc *(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+					Vec2f v1 = evalExpr((i - 0.33) *invNdisc *(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
+					cairo_curve_to(cr, v0[0], v0[1], v1[0], v1[1], v[0], v[1]);
+				} else {
+					cairo_line_to(cr, v[0], v[1]);
 				}
 			}
+			cairo_stroke(cr);
+		}
 
-
+		if (displayControls) {
+			drawBox(canvas, position[0] - relativeCenter[0], position[1] - 200 * s - relativeCenter[1], position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1]);
 		}
 
 	}
@@ -1647,4 +1626,303 @@ public:
 	ExprProperty expression;
 	BoolProperty axisXVisible, axisYVisible, showGrid;
 	IntProperty xticks, yticks;
+};
+
+
+
+class Grid : public Shape {
+public:
+	Grid(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string thickness = "1") : Shape("Grid", visible), pos(position), scale(scale), color(color), thickness(thickness), axisXVisible(true), axisYVisible(true), closeX(true), closeY(true), xticks(5), yticks(5), ratio(Expr("1")) {
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		this->axisXVisible.name = "Horizontal";
+		this->axisYVisible.name = "Vertical";
+		this->closeX.name = "Horz. closed";
+		this->closeY.name = "Vert. closed";
+		this->xticks.name = "Nb horz. lines";
+		this->yticks.name = "Nb vert. lines";
+		this->ratio.name = "Vert/Horz ratio";
+
+
+		parameters.push_back((Property*)&this->axisXVisible);
+		parameters.push_back((Property*)&this->axisYVisible);
+		parameters.push_back((Property*)&this->xticks);
+		parameters.push_back((Property*)&this->yticks);
+		parameters.push_back((Property*)&this->ratio);
+		parameters.push_back((Property*)&this->closeX);
+		parameters.push_back((Property*)&this->closeY);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thickness);
+
+	}
+	Grid(const Grid& d) : Shape(d.shapeType, true), ratio(d.ratio), pos(d.pos), scale(d.scale), color(d.color), thickness(d.thickness), axisXVisible(d.axisXVisible), axisYVisible(d.axisYVisible), xticks(d.xticks), yticks(d.yticks), closeX(d.closeX), closeY(d.closeY) {
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		this->axisXVisible.name = "Horizontal";
+		this->axisYVisible.name = "Vertical";
+		this->closeX.name = "Horz. closed";
+		this->closeY.name = "Vert. closed";
+		this->xticks.name = "Nb horz. lines";
+		this->yticks.name = "Nb vert. lines";
+		this->ratio.name = "Vert/Horz ratio";
+
+
+		parameters.push_back((Property*)&this->axisXVisible);
+		parameters.push_back((Property*)&this->axisYVisible);
+		parameters.push_back((Property*)&this->xticks);
+		parameters.push_back((Property*)&this->yticks);
+		parameters.push_back((Property*)&this->ratio);
+		parameters.push_back((Property*)&this->closeX);
+		parameters.push_back((Property*)&this->closeY);
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->thickness);
+
+	}
+
+
+	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
+
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Vec3u color = this->color.getDisplayValue(time);
+
+
+		if (visible.getDisplayValue()) {
+			float edgeThick = thickness.getDisplayValue(time)*s;
+
+			cairo_t *cr = canvas.cr;
+			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+			cairo_set_line_width(cr, edgeThick);
+
+			unsigned char black[3] = { 0,0,0 };
+			unsigned char lightgrey[3] = { 230,230,230 };
+
+
+			if (axisYVisible.getDisplayValue() && yticks.getDisplayValue(time) > 0) {
+				int starti = 0;
+				int endi = yticks.getDisplayValue(time) - 1;
+				float xscale = 200 * s / (endi - starti);
+				if (!closeY.getDisplayValue()) {
+					starti++; endi++;
+					xscale = 200 * s / (endi - starti + 2);
+				}
+
+				for (int i = starti; i <= endi; i++) {
+					drawAntiAliasedLine1(canvas, position[0] - relativeCenter[0] + i * xscale, position[1] - relativeCenter[1], position[0] - relativeCenter[0] + i * xscale, position[1] - 200 * s - relativeCenter[1], Vec3u(color[0], color[1], color[2]), edgeThick);
+				}
+			}
+
+			if (axisXVisible.getDisplayValue() && xticks.getDisplayValue(time) > 0) {
+				int starti = 0;
+				int endi = xticks.getDisplayValue(time) - 1;
+				float yscale = 200 * s / (endi - starti)*ratio.getDisplayValue(time);
+				if (!closeX.getDisplayValue()) {
+					starti++; endi++;
+					yscale = 200 * s / (endi - starti + 2);
+				}
+
+				for (int i = starti; i <= endi; i++) {
+					drawAntiAliasedLine1(canvas, position[0] - relativeCenter[0], position[1] - relativeCenter[1] - i * yscale, position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1] - i * yscale, Vec3u(color[0], color[1], color[2]), edgeThick);
+				}
+			}
+		}
+
+		if (displayControls) {
+			drawBox(canvas, position[0] - relativeCenter[0], position[1] - 200 * s - relativeCenter[1], position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1]);
+		}
+	}
+
+	virtual bool Contains(const Vec2f& coord, float time) const {
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Vec3u color = this->color.getDisplayValue(time);
+		float x0 = position[0] - relativeCenter[0];
+		float y0 = position[1] - relativeCenter[1];
+		float x1 = position[0] + 200 * s - relativeCenter[0];
+		float y1 = position[1] - 200 * s - relativeCenter[1];
+		if (coord[0] > x0 && coord[0]<x1 && coord[1]>y1 && coord[1] < y0) return true;
+
+		return false;
+	}
+	virtual Shape* Clone() {
+		return new Grid(*this);
+	}
+	virtual void SetPosition(float time, const Vec2f& coord) {
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));
+	}
+	virtual Vec2f GetPosition(float time) {
+		return pos.getDisplayValue(time);
+	}
+	virtual void SetScale(float time, float value) {
+		scale.setDisplayValue(std::to_string(value));
+	}
+	virtual float GetScale(float time) {
+		return scale.getDisplayValue(time);
+	}
+
+
+	PositionProperty pos;
+	ColorProperty color;
+	FloatProperty scale, thickness, ratio;
+	BoolProperty axisXVisible, axisYVisible, closeX, closeY;
+	IntProperty xticks, yticks;
+};
+
+
+class PointSet : public Shape {
+public:
+	PointSet(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string pointSize = "1") : Shape("PointSet", visible), pos(position), scale(scale), color(color), dim1(0), dim2(1), pointSize(Expr("5")), showBoundary(true) {
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->pointSize.setDefaults("Point size", 0.f, 1000.f, 1.f);
+		this->showBoundary.name = "Show domain boundary";
+		this->dim1.setDefaults("Dimension 1", 0, 10000);
+		this->dim2.setDefaults("Dimension 2", 0, 10000);
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->pointset);
+		parameters.push_back((Property*)&this->dim1);
+		parameters.push_back((Property*)&this->dim2);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->pointSize);
+		parameters.push_back((Property*)&this->showBoundary);
+
+	}
+	PointSet(const PointSet& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), pointSize(d.pointSize), showBoundary(d.showBoundary), pointset(d.pointset), dim1(d.dim1), dim2(d.dim2) {
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->pointSize.setDefaults("Point size", 0.f, 1000.f, 1.f);
+		this->showBoundary.name = "Show domain boundary";
+		this->dim1.setDefaults("Dimension 1", 0, 10000);
+		this->dim2.setDefaults("Dimension 2", 0, 10000);
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->pointset);
+		parameters.push_back((Property*)&this->dim1);
+		parameters.push_back((Property*)&this->dim2);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->pointSize);
+		parameters.push_back((Property*)&this->showBoundary);
+
+	}
+
+	void getBBox(float time, float &minX, float &minY, float &maxX, float &maxY) const {
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Points pts = pointset.getDisplayValue(time);
+		if (pts.dim == 0) return;
+		int d1 = dim1.getDisplayValue(time);
+		int d2 = dim2.getDisplayValue(time);
+		minX = 1E9;
+		minY = 1E9;
+		maxX = -1E9;
+		maxY = -1E9;
+
+		for (std::map<float, Points>::const_iterator it = pointset.points.values.begin(); it != pointset.points.values.end(); ++it) {
+			for (int i = 0; i < it->second.npoints(); i++) {
+				float v1 = it->second.coords[i*it->second.dim + d1];
+				float v2 = -it->second.coords[i*it->second.dim + d2];
+				minX = std::min(minX, v1);
+				maxX = std::max(maxX, v1);
+				minY = std::min(minY, v2);
+				maxY = std::max(maxY, v2);
+			}
+		}
+		for (int i = 0; i < pts.npoints(); i++) {
+			float v1 = pts.coords[i*pts.dim + d1];
+			float v2 = -pts.coords[i*pts.dim + d2];
+			minX = std::min(minX, v1);
+			maxX = std::max(maxX, v1);
+			minY = std::min(minY, v2);
+			maxY = std::max(maxY, v2);
+		}
+	}
+
+	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
+
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Vec3u color = this->color.getDisplayValue(time);
+
+
+		if (visible.getDisplayValue()) {
+
+			float diskSize = pointSize.getDisplayValue(time)*s;
+
+			int d1 = dim1.getDisplayValue(time);
+			int d2 = dim2.getDisplayValue(time);
+			Points pts = pointset.getDisplayValue(time);
+			//reLoad(time);
+			if (pts.coords.size() > 0) {
+				float minX = 1E9, minY = 1E9, maxX = -1E9, maxY = -1E9;
+				getBBox(time, minX, minY, maxX, maxY);
+
+				float maxSize = std::max(maxX - minX, maxY - minY);
+				cairo_t *cr = canvas.cr;
+				cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+				for (int i = 0; i < pts.npoints(); i++) {
+					float v1 = (pts.coords[i*pts.dim + d1] - minX) / maxSize * 200.f*s;
+					float v2 = (-pts.coords[i*pts.dim + d2] - minY) / maxSize * 200.f*s;
+					cairo_arc(cr, v1 + position[0] - relativeCenter[0], v2 + position[1] - 200 - relativeCenter[1], diskSize, 0, 2 * M_PI);
+					cairo_fill(cr);
+				}
+			}
+			/*cairo_t *cr = canvas.cr;
+			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+			cairo_set_line_width(cr, edgeThick);
+
+			drawAntiAliasedLine1(canvas, position[0] - relativeCenter[0] + i * xscale, position[1] - relativeCenter[1], position[0] - relativeCenter[0] + i * xscale, position[1] - 200 * s - relativeCenter[1], Vec3u(color[0], color[1], color[2]), edgeThick);
+			*/
+		}
+		if (displayControls) {
+			drawBox(canvas, position[0] - relativeCenter[0], position[1] - 200 * s - relativeCenter[1], position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1]);
+		}
+	}
+
+	virtual bool Contains(const Vec2f& coord, float time) const {
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Vec3u color = this->color.getDisplayValue(time);
+		float x0 = position[0] - relativeCenter[0];
+		float y0 = position[1] - relativeCenter[1];
+		float x1 = position[0] + 200 * s - relativeCenter[0];
+		float y1 = position[1] - 200 * s - relativeCenter[1];
+		if (coord[0] > x0 && coord[0]<x1 && coord[1]>y1 && coord[1] < y0) return true;
+
+		return false;
+	}
+	virtual Shape* Clone() {
+		return new PointSet(*this);
+	}
+	virtual void SetPosition(float time, const Vec2f& coord) {
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));
+	}
+	virtual Vec2f GetPosition(float time) {
+		return pos.getDisplayValue(time);
+	}
+	virtual void SetScale(float time, float value) {
+		scale.setDisplayValue(std::to_string(value));
+	}
+	virtual float GetScale(float time) {
+		return scale.getDisplayValue(time);
+	}
+
+
+	PositionProperty pos;
+	ColorProperty color;
+	FloatProperty scale, pointSize;
+	BoolProperty showBoundary;
+	IntProperty dim1, dim2;
+	PointSetProperty pointset;
+	//mutable std::vector<float> coords;
+	//mutable int ndims;
 };
