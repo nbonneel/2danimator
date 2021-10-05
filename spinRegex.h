@@ -27,7 +27,6 @@ public:
 	}
 	
 	virtual bool DoTextToValue(const wxString& text, double *val) wxOVERRIDE {	
-
 		double lval;
 		if (!text.ToDouble(&lval)) {
 			std::string newtext = replace_variable(std::string(text), tval);

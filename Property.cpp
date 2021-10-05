@@ -224,6 +224,30 @@ void ExprProperty::CreateWidgets(float time) {
 	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
 }
 
+void EnumProperty::CreateWidgets(float time) {
+	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	property_sizer->Add(spacing_text, 0, wxEXPAND);
+	controlID++;
+
+
+	int v = value.getDisplayValue();
+	wxArrayString choices;
+	for (int i=0; i<options.size(); i++)
+		choices.Add(options[i]);
+	propEnum = new wxComboBox(myApp->propertiesPanel, controlID, options[v], wxDefaultPosition, wxDefaultSize, choices);
+	propEnum->Bind(wxEVT_COMBOBOX, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
+	//propInt->Bind(wxEVT_LEFT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
+	//propEnum->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
+	propEnum->Bind(wxEVT_MOUSE_CAPTURE_LOST, &AnimatorPanel::OnSpinMouseCaptureLost, myApp->animatorPanel);
+	//myApp->animatorPanel->widgetToProperty[propFloat1] = this;
+	controlID++;
+	property_sizer->Add(propEnum, 1, wxEXPAND);
+
+	property_sizer->Layout();
+	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+}
+
 double Hue(double);
 
 

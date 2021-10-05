@@ -313,6 +313,7 @@ FastVector<T, DIM> operator*(T a, const FastVector<T, DIM>& b) {
 
 typedef  Vector<bool, 1> Bool;
 typedef  Vector<float, 2> Vec2f;
+typedef  Vector<float, 3> Vec3f;
 typedef  FastVector<float, 2> FastVec2f;
 typedef  Vector<unsigned char, 3> Vec3u;
 typedef  Vector<float, 1> Float;
@@ -411,7 +412,33 @@ typedef  Vector<std::string, 1> Expr;
 typedef  Vector<std::string, 2> Vec2s;
 typedef  Vector<std::string, 3> Vec3s;
 
-
+static inline Vec3f rotateX(const Vec3f& v, float angle) {
+	Vec3f res;
+	float sa = sin(angle);
+	float ca = cos(angle);
+	res[0] = v[0];
+	res[1] = v[1] * ca - v[2] * sa;
+	res[2] = v[1] * sa + v[2] * ca;
+	return res;
+}
+static inline Vec3f rotateY(const Vec3f& v, float angle) {
+	Vec3f res;
+	float sa = sin(angle);
+	float ca = cos(angle);
+	res[0] = v[0] * ca - v[2] * sa;
+	res[1] = v[1];
+	res[2] = v[0] * sa + v[2] * ca;
+	return res;
+}
+static inline Vec3f rotateZ(const Vec3f& v, float angle) {
+	Vec3f res;
+	float sa = sin(angle);
+	float ca = cos(angle);
+	res[0] = v[0] * ca - v[1] * sa;
+	res[1] = v[0] * sa + v[1] * ca;
+	res[2] = v[2];
+	return res;
+}
 
 static inline Vec2f rotate(const Vec2f& v, float angle) {
 	Vec2f res;

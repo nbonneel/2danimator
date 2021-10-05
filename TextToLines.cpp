@@ -301,6 +301,10 @@ void TextToLine::convert(std::vector<float>& coords, std::vector<int> &contours)
 	contours.reserve(100);
 	float minX = 1E9, maxX = -1E9, minY = 1E9, maxY = -1E9;
 	for (int cid = 0; cid < text.size(); cid++) {
+		if (text[cid] == ' ') {
+			prevW += printer.m_width*1.1;
+			continue;
+		}
 		printer.Run(&text[cid]);
 		FT_Face face = printer.m_face;
 		FT_GlyphSlot slot = face->glyph;

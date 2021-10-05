@@ -551,7 +551,7 @@ bool AnimatorApp::OnInit() {
 	defaultSpline->addVertex(-1.f, Vec2f(150, 200));
 	defaultSpline->addVertex(-1.f, Vec2f(100, 150));
 	defaultSpline->addVertex(-1.f, Vec2f(100, 90));
-	panelObject_sizer->Add(addObjectButton("BSpline", defaultSpline, panelObject, animatorPanel), 0, wxEXPAND);
+	panelObject_sizer->Add(addObjectButton("BSpline / Polylines", defaultSpline, panelObject, animatorPanel), 0, wxEXPAND);
 
 	panelObject_sizer->Add(addObjectButton("1D Plot", new Plotter1D(Vec2s("200", "200"), "1", Vec3u(241, 198, 198)), panelObject, animatorPanel), 0, wxEXPAND);
 

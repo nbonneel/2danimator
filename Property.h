@@ -15,6 +15,7 @@
 #include "wx/event.h"
 #include <map>
 #include "Vector.h"
+#include "wx/combobox.h"
 #include <fstream>
 
 static int controlID = 500;
@@ -907,4 +908,59 @@ public:
 	Interpolator<Points> points;
 	std::string propertyName;
 	ClickableFilePicker  *filePicker;
+};
+
+class EnumProperty : public Property {
+public:
+	EnumProperty(int val) : name("options"), Property("EnumProperty"), value(val) {};
+	virtual void CreateWidgets(float time);
+	virtual void UpdateWidgets(float time) {
+		int v = value.getDisplayValue();
+		if (v < 0) v = 0;
+		propEnum->SetValue(options[v]);
+		propEnum->Select(v);
+
+		if (value.hasKeyframe(time))
+			propEnum->SetBackgroundColour(wxColour(255, 0, 0));
+		else
+			propEnum->SetBackgroundColour(wxColour(255, 255, 255));
+	};
+	virtual void UpdateParameterFromWidget(float time) {
+		value.setDisplayValue(propEnum->GetSelection());
+	}
+	virtual void UpdateInternalTime(float time) {
+		value.setDisplayValue(value.getValue(time));
+	}
+	//float eval(float time) const { return eval_string(value.getValue(time).coords[0], time); }
+	void setValue(float time, int val) { return value.setValue(time, val); }
+	void setDefaults(std::string name, const std::string* values, int nvalues) { this->name = name; options.clear();  for (int i = 0; i < nvalues; i++) options.push_back(values[i]); };
+
+	virtual void addKeyframe(float time) {
+		value.setValue(time, getDisplayValue(time));
+	}
+	int getDisplayValue(float time) const {
+		return value.getDisplayValue();
+	}
+	void setDisplayValue(int val) {
+		return value.setDisplayValue(val);
+	}
+	void SetWidgetsNull() {
+		propEnum = NULL;
+	}
+	virtual void print(std::ostream& os) const {
+		os << name << std::endl;
+		os << value << std::endl;
+	}
+	virtual void read(std::istream& is) {
+		char line[255];
+		do {
+			is.getline(line, 255);
+			name = std::string(line);
+		} while (name == "");
+		is >> value;
+	}
+	Interpolator<int> value;
+	wxComboBox *propEnum;
+	std::string name;
+	std::vector<std::string> options;
 };

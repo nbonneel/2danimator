@@ -10,6 +10,8 @@
 using namespace lemon;
 class Spline;
 
+static const float arrow2[] = {7.59, 0, -2.36, 4.06, 0, 0, -2.36, -4.06};
+static int cur_index;
 
 template<typename T>
 std::string to_string_with_precision(const T a_value, const int n = 6) {
@@ -1218,27 +1220,69 @@ public:
 
 class Spline : public Shape {
 public:
-	Spline(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string thickness = "1") : Shape("Spline", visible), pos(position), scale(scale), color(color), thickness(thickness) {
+	Spline(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string thickness = "1") : Shape("Spline", visible), pos(position), scale(scale), color(color), thickness(thickness), capStart(1), capEnd(1), progressStart(Expr("0")), progressEnd(Expr("100")), lineType(1) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		std::string options[] = { "Square", "Round", "Arrow" };
+		std::string options2[] = { "Straight", "BSpline" };
+		this->capStart.setDefaults("Cap Start", options, 3);
+		this->capEnd.setDefaults("Cap End", options, 3);
+		this->lineType.setDefaults("Line Type", options2, 2);
+		this->progressStart.setDefaults("Progress start (%)", 0, 100, 0.5);
+		this->progressEnd.setDefaults("Progress end (%)", 0, 100, 0.5);
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->thickness);
+		parameters.push_back((Property*)&this->lineType);
+		parameters.push_back((Property*)&this->capStart);
+		parameters.push_back((Property*)&this->capEnd);
+		parameters.push_back((Property*)&this->progressStart);
+		parameters.push_back((Property*)&this->progressEnd);
 		parameters.push_back((Property*)&this->controlPoints);
 	}
-	Spline(const Spline& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness) {
+	Spline(const Spline& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness), capStart(d.capStart), capEnd(d.capEnd), progressStart(d.progressStart), progressEnd(d.progressEnd), lineType(d.lineType) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->thickness.setDefaults("Thickness", 0.f, 1000.f, 1.f);
+		std::string options[] = { "None", "Round", "Arrow" };
+		std::string options2[] = { "Straight", "BSpline" };
+		this->capStart.setDefaults("Cap Start", options, 3);
+		this->capEnd.setDefaults("Cap End", options, 3);
+		this->lineType.setDefaults("Line Type", options2, 2);
+		this->progressStart.setDefaults("Progress start (%)", 0, 100, 0.5);
+		this->progressEnd.setDefaults("Progress end (%)", 0, 100, 0.5);
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->thickness);
+		parameters.push_back((Property*)&this->lineType);
+		parameters.push_back((Property*)&this->capStart);
+		parameters.push_back((Property*)&this->capEnd);
+		parameters.push_back((Property*)&this->progressStart);
+		parameters.push_back((Property*)&this->progressEnd);
 		parameters.push_back((Property*)&this->controlPoints);
 	}
 
 	void addVertex(float time, const Vec2f& v) {
 		controlPoints.addVertex(time, v);
+	}
+
+	Vec2f evalLine(float t, const VerticesList& controlPoints) const {
+		float totalLength = 0;
+		for (int j = 1; j < controlPoints.size(); j++) {
+			totalLength += norm(controlPoints.vertices[j] - controlPoints.vertices[j - 1]);
+		}
+		t*= totalLength;
+		float curLength = 0;
+		for (int j = 1; j < controlPoints.size(); j++) {
+			float segLength = norm(controlPoints.vertices[j] - controlPoints.vertices[j - 1]);
+			curLength += segLength;
+			if (curLength >= t-0.00001) {
+				Vec2f p = controlPoints.vertices[j - 1] + (t-(curLength-segLength))/segLength *(controlPoints.vertices[j] - controlPoints.vertices[j - 1]);
+				return p;
+			}
+		}
+		return controlPoints.vertices[controlPoints.vertices.size() - 1];
 	}
 
 	//0 1/6 2/6 3/6 4/6 5/6 6/6
@@ -1275,6 +1319,21 @@ public:
 		return result;
 	}
 
+	void setupArrowPath(cairo_t *cr, const Vec2f& arrowDir, const Vec2f& arrowStart, float arrowSize) const {
+
+		Vec2f perp(-arrowDir[1], arrowDir[0]);
+		for (int i = 0; i < 4; i++) {
+			Vec2f ar(arrow2[i * 2], arrow2[i * 2 + 1]);			
+			Vec2f arcoord = (ar[0] * arrowDir + ar[1] * perp)*arrowSize + arrowStart;
+			if (i == 0) {
+				cairo_move_to(cr, arcoord[0], arcoord[1]);
+			} else {
+				cairo_line_to(cr, arcoord[0], arcoord[1]);
+			}
+		}
+		cairo_close_path(cr);
+	}
+
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
 		VerticesList evalControlPoints = controlPoints.getDisplayValue();
 		float s = scale.getDisplayValue(time);
@@ -1294,24 +1353,138 @@ public:
 		maxY = std::min(maxY + 1, canvas.H - 1);
 
 		if (visible.getDisplayValue()) {
+			int cpStart = capStart.getDisplayValue(time);
+			int cpEnd = capEnd.getDisplayValue(time);
 			float edgeThick = thickness.getDisplayValue(time);
 			cairo_t *cr = canvas.cr;
 			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
-			cairo_set_line_width(cr, s*edgeThick);
-			Vec2f v = evalBSpline(0.f, evalControlPoints)*s + p;
-			cairo_move_to(cr, v[0], v[1]);
 
-			for (int i = 0; i < 100; i++) {
-				Vec2f v = evalBSpline(i / 100.f, evalControlPoints)*s + p;
-				if (i >= 1) {
-					Vec2f v0 = evalBSpline((i - 0.66) / 100.f, evalControlPoints)*s + p;
-					Vec2f v1 = evalBSpline((i - 0.33) / 100.f, evalControlPoints)*s + p;
-					cairo_curve_to(cr, v0[0], v0[1], v1[0], v1[1], v[0], v[1]);
-				} else {
+			if (lineType.getDisplayValue(time) == 1) { // Splines
+				
+				float Ndisc = 200.f;
+				int istart = (progressStart.getDisplayValue(time) * Ndisc) / 100;
+				int iend = (progressEnd.getDisplayValue(time) * Ndisc) / 100;
+
+				if (cpStart == 2) {
+					cairo_set_line_width(cr, 1);
+					Vec2f vendm1 = evalBSpline(istart / Ndisc, evalControlPoints)*s + p;
+					Vec2f vend = evalBSpline((istart + 1.f) / Ndisc, evalControlPoints)*s + p;
+					Vec2f ardir = getNormalized(vendm1 - vend);
+					setupArrowPath(cr, ardir, vendm1, s*edgeThick);					
+					cairo_fill(cr);
+				}
+
+				if (cpStart == 0)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+				if (cpStart == 1)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+
+				cairo_set_line_width(cr, s*edgeThick);
+				Vec2f v = evalBSpline(istart / Ndisc, evalControlPoints)*s + p;
+				cairo_move_to(cr, v[0], v[1]);
+
+				for (int i = istart; i < iend; i++) {
+					Vec2f v = evalBSpline(i / Ndisc, evalControlPoints)*s + p;
+					if (i >= 1) {
+						Vec2f v0 = evalBSpline((i - 0.66) / Ndisc, evalControlPoints)*s + p;
+						Vec2f v1 = evalBSpline((i - 0.33) / Ndisc, evalControlPoints)*s + p;
+						cairo_curve_to(cr, v0[0], v0[1], v1[0], v1[1], v[0], v[1]);
+						if (i == (istart + iend) / 2) {
+							cairo_stroke(cr);
+							cairo_move_to(cr, v[0], v[1]);
+						}
+					} else {
+						cairo_line_to(cr, v[0], v[1]);
+					}
+				}
+				if (cpEnd == 0)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+				if (cpEnd == 1)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+				cairo_stroke(cr);
+				if (cpEnd == 2) {
+					cairo_set_line_width(cr, 1);
+					Vec2f vendm1 = evalBSpline((iend - 1.f) / Ndisc, evalControlPoints)*s + p;
+					Vec2f vend = evalBSpline(iend / Ndisc, evalControlPoints)*s + p;
+					Vec2f ardir = getNormalized(vend - vendm1);
+					setupArrowPath(cr, ardir, vendm1, s*edgeThick);
+					cairo_fill(cr);
+				}
+			} else { // Straight Line
+
+				float totalLength = 0;
+				for (int i = 1; i < evalControlPoints.size(); i++) {
+					totalLength += norm(evalControlPoints.vertices[i] - evalControlPoints.vertices[i - 1]);
+				}
+				float lengthStart = totalLength * progressStart.getDisplayValue(time) / 100.f;
+				float lengthEnd = totalLength * progressEnd.getDisplayValue(time) / 100.f;
+
+				float curLength = 0, iLengthStart, iLengthEnd;
+				int iStart, iEnd;
+				Vec2f pStart, pEnd;
+				for (int i = 1; i < evalControlPoints.size(); i++) {		
+					float segLength = norm(evalControlPoints.vertices[i] - evalControlPoints.vertices[i - 1]);
+					curLength += segLength;
+					if (curLength >= lengthStart - 0.0001) {
+						iStart = i - 1; iLengthStart = curLength; 
+						pStart = evalControlPoints.vertices[i - 1] + (lengthStart - (curLength - segLength)) / segLength * (evalControlPoints.vertices[i] - evalControlPoints.vertices[i - 1]);
+						break;
+					}
+				}
+				curLength = 0;
+				for (int i = 1; i < evalControlPoints.size(); i++) {
+					float segLength = norm(evalControlPoints.vertices[i] - evalControlPoints.vertices[i - 1]);
+					curLength += segLength;
+					if (curLength >= lengthEnd-0.0001) {
+						iEnd = i; iLengthEnd = curLength;
+						pEnd = evalControlPoints.vertices[i - 1] + (lengthEnd - (curLength - segLength)) / segLength * (evalControlPoints.vertices[i] - evalControlPoints.vertices[i - 1]);
+						break;
+					}
+				}
+
+				if (cpStart == 2) {
+					cairo_set_line_width(cr, 1);
+					Vec2f vendm1 = pStart*s + p;
+					Vec2f vend = evalControlPoints.vertices[iStart+1]*s + p;
+					Vec2f ardir = getNormalized(vendm1 - vend);
+					setupArrowPath(cr, ardir, vendm1, s*edgeThick);
+					cairo_fill(cr);
+				}
+
+				if (cpStart == 0)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+				if (cpStart == 1)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
+
+				cairo_set_line_width(cr, s*edgeThick);
+				Vec2f v = pStart*s + p;
+				cairo_move_to(cr, v[0], v[1]);
+
+				for (int i = iStart+1; i < iEnd; i++) {
+					Vec2f v = evalControlPoints.vertices[i] *s + p;
 					cairo_line_to(cr, v[0], v[1]);
 				}
+				v = pEnd * s + p;
+				cairo_line_to(cr, v[0], v[1]);
+				if (cpEnd == 0)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+				if (cpEnd == 1)
+					cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+				cairo_stroke(cr);
+				if (cpEnd == 2) {
+					cairo_set_line_width(cr, 1);
+					Vec2f vendm1 = evalControlPoints.vertices[iEnd-1] * s + p; 
+					Vec2f vend = pEnd * s + p;
+					Vec2f ardir = getNormalized(vend - vendm1);
+					setupArrowPath(cr, ardir, vend, s*edgeThick);
+					cairo_fill(cr);
+				}
+
 			}
-			cairo_stroke(cr);
+
+			cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
 		}
 
 		if (displayControls) { // draw Bbox
@@ -1434,8 +1607,9 @@ public:
 
 	PositionProperty pos;
 	ColorProperty color;
-	FloatProperty scale, thickness;
+	FloatProperty scale, thickness, progressStart, progressEnd;
 	VerticesListProperty controlPoints;
+	EnumProperty capStart, capEnd, lineType;
 };
 
 class Plotter1D : public Shape {
@@ -1495,6 +1669,7 @@ public:
 		std::string e = expression.getDisplayValue(time);
 		std::string newstring = replace_variable(e, t, 'x');
 		std::string newstring2 = replace_variable(newstring, time, 't');
+		newstring = replace_variable(newstring2, cur_index, 'i');
 
 		float value = ceval_result2(newstring2);
 
@@ -1570,6 +1745,7 @@ public:
 			cairo_move_to(cr, v[0], v[1]);
 
 			for (int i = 0; i < Ndisc; i++) {
+				cur_index = i;
 				Vec2f v = evalExpr(i *invNdisc *(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
 				if (i > 1) {
 					Vec2f v0 = evalExpr((i - 0.66) *invNdisc *(xrange[1] - xrange[0]) + xrange[0], position, relativeCenter, xrange, yrange, s, time);
@@ -1778,37 +1954,54 @@ public:
 
 class PointSet : public Shape {
 public:
-	PointSet(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string pointSize = "1") : Shape("PointSet", visible), pos(position), scale(scale), color(color), dim1(0), dim2(1), pointSize(Expr("5")), showBoundary(true) {
+	PointSet(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string pointSize = "1") : Shape("PointSet", visible), pos(position), scale(scale), color(color), dim1(0), dim2(1), dim3(-1), pointSize(Expr("5")), rotX(Expr("0")), rotY(Expr("0")), rotZ(Expr("0")), showBoundary(true) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->pointSize.setDefaults("Point size", 0.f, 1000.f, 1.f);
 		this->showBoundary.name = "Show domain boundary";
 		this->dim1.setDefaults("Dimension 1", 0, 10000);
 		this->dim2.setDefaults("Dimension 2", 0, 10000);
+		this->dim3.setDefaults("Dimension 3", -1, 10000);
+		this->rotX.setDefaults("Rot. X", -3600, 3600, 0.01);
+		this->rotY.setDefaults("Rot. Y", -3600, 3600, 0.01);
+		this->rotZ.setDefaults("Rot. Z", -3600, 3600, 0.01);
 
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
 		parameters.push_back((Property*)&this->pointset);
 		parameters.push_back((Property*)&this->dim1);
 		parameters.push_back((Property*)&this->dim2);
+		parameters.push_back((Property*)&this->dim3);
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->pointSize);
+		parameters.push_back((Property*)&this->rotX);
+		parameters.push_back((Property*)&this->rotY);
+		parameters.push_back((Property*)&this->rotZ);
 		parameters.push_back((Property*)&this->showBoundary);
 
 	}
-	PointSet(const PointSet& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), pointSize(d.pointSize), showBoundary(d.showBoundary), pointset(d.pointset), dim1(d.dim1), dim2(d.dim2) {
+	PointSet(const PointSet& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), pointSize(d.pointSize), showBoundary(d.showBoundary), pointset(d.pointset), dim1(d.dim1), dim2(d.dim2), dim3(d.dim3), rotX(d.rotX), rotY(d.rotY), rotZ(d.rotZ) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->pointSize.setDefaults("Point size", 0.f, 1000.f, 1.f);
 		this->showBoundary.name = "Show domain boundary";
 		this->dim1.setDefaults("Dimension 1", 0, 10000);
 		this->dim2.setDefaults("Dimension 2", 0, 10000);
+		this->dim3.setDefaults("Dimension 3", -1, 10000);
+		this->rotX.setDefaults("Rot. X", -3600, 3600, 0.01);
+		this->rotY.setDefaults("Rot. Y", -3600, 3600, 0.01);
+		this->rotZ.setDefaults("Rot. Z", -3600, 3600, 0.01);
+
 
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
 		parameters.push_back((Property*)&this->pointset);
 		parameters.push_back((Property*)&this->dim1);
 		parameters.push_back((Property*)&this->dim2);
+		parameters.push_back((Property*)&this->dim3);
 		parameters.push_back((Property*)&this->color);
 		parameters.push_back((Property*)&this->pointSize);
+		parameters.push_back((Property*)&this->rotX);
+		parameters.push_back((Property*)&this->rotY);
+		parameters.push_back((Property*)&this->rotZ);
 		parameters.push_back((Property*)&this->showBoundary);
 
 	}
@@ -1846,42 +2039,153 @@ public:
 		}
 	}
 
+	Vec3f transform(const Vec3f& p) const {
+		//return Vec2f(p[0] / p[2], p[1] / p[2]);
+		return rotateZ(rotateY(rotateX(p, rx), ry), rz);
+		//return Vec2f(rot[0], rot[1]);
+	}
+
+	void getBBoxProj(float time, float &minX, float &minY, float &maxX, float &maxY) const {
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Points pts = pointset.getDisplayValue(time);
+		if (pts.dim == 0) return;
+		int d1 = dim1.getDisplayValue(time);
+		int d2 = dim2.getDisplayValue(time);
+		int d3 = dim3.getDisplayValue(time);
+		minX = 1E9;
+		minY = 1E9;
+		maxX = -1E9;
+		maxY = -1E9;
+
+		for (std::map<float, Points>::const_iterator it = pointset.points.values.begin(); it != pointset.points.values.end(); ++it) {
+			for (int i = 0; i < it->second.npoints(); i++) {
+				float v1 = it->second.coords[i*it->second.dim + d1];
+				float v2 = -it->second.coords[i*it->second.dim + d2];
+				float v3 = 0;
+				if (d3>=0)
+					v3 = it->second.coords[i*it->second.dim + d3];
+				Vec3f p = transform(Vec3f(v1, v2, v3));
+				minX = std::min(minX, p[0]);
+				maxX = std::max(maxX, p[0]);
+				minY = std::min(minY, p[1]);
+				maxY = std::max(maxY, p[1]);
+			}
+		}
+		for (int i = 0; i < pts.npoints(); i++) {
+			float v1 = pts.coords[i*pts.dim + d1];
+			float v2 = -pts.coords[i*pts.dim + d2];
+			float v3 = 0;
+			if (d3 >= 0)
+				v3 = pts.coords[i*pts.dim + d3];
+			Vec3f p = transform(Vec3f(v1, v2, v3));
+			minX = std::min(minX, p[0]);
+			maxX = std::max(maxX, p[0]);
+			minY = std::min(minY, p[1]);
+			maxY = std::max(maxY, p[1]);
+		}
+	}
+
+	void getBBox3(float time, float &minX, float &minY, float &minZ, float &maxX, float &maxY, float &maxZ) const {
+		Vec2f position = pos.getDisplayValue(time);
+		float s = scale.getDisplayValue(time);
+		Vec2f relativeCenter = Vec2f(100, -100)*s;
+		Points pts = pointset.getDisplayValue(time);
+		if (pts.dim == 0) return;
+		int d1 = dim1.getDisplayValue(time);
+		int d2 = dim2.getDisplayValue(time);
+		int d3 = dim3.getDisplayValue(time);
+		minX = 1E9;
+		minY = 1E9;
+		maxX = -1E9;
+		maxY = -1E9;
+
+		for (std::map<float, Points>::const_iterator it = pointset.points.values.begin(); it != pointset.points.values.end(); ++it) {
+			for (int i = 0; i < it->second.npoints(); i++) {
+				float v1 = it->second.coords[i*it->second.dim + d1];
+				float v2 = -it->second.coords[i*it->second.dim + d2];
+				float v3 = 0;
+				if (d3 >= 0)
+					v3 = it->second.coords[i*it->second.dim + d3];
+				minX = std::min(minX, v1);
+				maxX = std::max(maxX, v1);
+				minY = std::min(minY, v2);
+				maxY = std::max(maxY, v2);
+				minZ = std::min(minZ, v3);
+				maxZ = std::max(maxZ, v3);
+
+			}
+		}
+		for (int i = 0; i < pts.npoints(); i++) {
+			float v1 = pts.coords[i*pts.dim + d1];
+			float v2 = -pts.coords[i*pts.dim + d2];
+			float v3 = 0;
+			if (d3 >= 0)
+				v3 = pts.coords[i*pts.dim + d3];
+			minX = std::min(minX, v1);
+			maxX = std::max(maxX, v1);
+			minY = std::min(minY, v2);
+			maxY = std::max(maxY, v2);
+			minZ = std::min(minZ, v3);
+			maxZ = std::max(maxZ, v3);
+		}
+	}
+
+	mutable float rx, ry, rz;
+
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
 
 		Vec2f position = pos.getDisplayValue(time);
 		float s = scale.getDisplayValue(time);
 		Vec2f relativeCenter = Vec2f(100, -100)*s;
-		Vec3u color = this->color.getDisplayValue(time);
-
+		Vec3u color = this->color.getDisplayValue(time);		
 
 		if (visible.getDisplayValue()) {
 
 			float diskSize = pointSize.getDisplayValue(time)*s;
+			std::string coltext = "";
+			if (this->color.colorPicker) coltext = this->color.colorPicker->GetTextCtrl()->GetValue().ToStdString(); // to debug
 
 			int d1 = dim1.getDisplayValue(time);
 			int d2 = dim2.getDisplayValue(time);
+			int d3 = dim3.getDisplayValue(time);
 			Points pts = pointset.getDisplayValue(time);
 			//reLoad(time);
-			if (pts.coords.size() > 0) {
-				float minX = 1E9, minY = 1E9, maxX = -1E9, maxY = -1E9;
-				getBBox(time, minX, minY, maxX, maxY);
+			if (pts.coords.size() > 0) {				
+				    rx = rotX.getDisplayValue(time);
+					ry = rotY.getDisplayValue(time);
+					rz = rotZ.getDisplayValue(time);
+					float minX = 1E9, minY = 1E9, maxX = -1E9, maxY = -1E9, minZ = 1E9, maxZ=-1E9;
+					getBBox3(time, minX, minY, minZ, maxX, maxY, maxZ);
+					
+					float maxSize = std::max(std::max(maxX - minX, std::abs(maxY - minY)), maxZ-minZ) ;
+					float cX = (minX + maxX)*0.5f;
+					float cY = (minY + maxY)*0.5f;
+					float cZ = (minZ + maxZ)*0.5f;
 
-				float maxSize = std::max(maxX - minX, maxY - minY);
-				cairo_t *cr = canvas.cr;
-				cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
-				for (int i = 0; i < pts.npoints(); i++) {
-					float v1 = (pts.coords[i*pts.dim + d1] - minX) / maxSize * 200.f*s;
-					float v2 = (-pts.coords[i*pts.dim + d2] - minY) / maxSize * 200.f*s;
-					cairo_arc(cr, v1 + position[0] - relativeCenter[0], v2 + position[1] - 200 - relativeCenter[1], diskSize, 0, 2 * M_PI);
-					cairo_fill(cr);
-				}
+					cairo_t *cr = canvas.cr;
+
+					for (int i = 0; i < pts.npoints(); i++) {
+						if (coltext == "id")
+							cairo_set_source_rgb(cr, ((i*1234+456)%256) / 255.f, ((i * 3123 + 252) % 256) / 255.f, ((i * 4123 + 56) % 256) / 255.f);
+						else
+							cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+						float v1 = pts.coords[i*pts.dim + d1];
+						float v2 = -pts.coords[i*pts.dim + d2];
+						float v3 = 0;
+						if (d3>=0) v3 = pts.coords[i*pts.dim + d3];
+						v1 -= cX;
+						v2 -= cY;
+						v3 -= cZ;
+						Vec3f p = transform(Vec3f(v1, v2, v3));
+
+						p[0] = (p[0]/maxSize+0.5)* 200.f*s;
+						p[1] = (p[1]/ maxSize+0.5) * 200.f*s;
+						cairo_arc(cr, p[0] + position[0] - relativeCenter[0], p[1] + position[1] + relativeCenter[1], diskSize, 0, 2 * M_PI);
+						cairo_fill(cr);
+					}
 			}
-			/*cairo_t *cr = canvas.cr;
-			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
-			cairo_set_line_width(cr, edgeThick);
-
-			drawAntiAliasedLine1(canvas, position[0] - relativeCenter[0] + i * xscale, position[1] - relativeCenter[1], position[0] - relativeCenter[0] + i * xscale, position[1] - 200 * s - relativeCenter[1], Vec3u(color[0], color[1], color[2]), edgeThick);
-			*/
 		}
 		if (displayControls) {
 			drawBox(canvas, position[0] - relativeCenter[0], position[1] - 200 * s - relativeCenter[1], position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1]);
@@ -1920,9 +2224,9 @@ public:
 
 	PositionProperty pos;
 	ColorProperty color;
-	FloatProperty scale, pointSize;
+	FloatProperty scale, pointSize, rotX, rotY, rotZ;
 	BoolProperty showBoundary;
-	IntProperty dim1, dim2;
+	IntProperty dim1, dim2, dim3;
 	PointSetProperty pointset;
 	//mutable std::vector<float> coords;
 	//mutable int ndims;

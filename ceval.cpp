@@ -737,7 +737,11 @@ double ceval_curveX(double x, double t, int arg_check) {
 		if (s) {
 			if (s->id == i) {
 				VerticesList controlPoints = s->controlPoints.getDisplayValue();
-				return s->evalBSpline(t, controlPoints)[0] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[0];
+				if (s->lineType.getDisplayValue(t) == 1) {
+					return s->evalBSpline(t, controlPoints)[0] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[0];
+				} else {
+					return s->evalLine(t, controlPoints)[0] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[0];
+				}
 			}
 			ns++;
 		}
@@ -772,7 +776,11 @@ double ceval_curveY(double x, double t, int arg_check) {
 		if (s) {
 			if (s->id == i) {
 				VerticesList controlPoints = s->controlPoints.getDisplayValue();
-				return s->evalBSpline(t, controlPoints)[1] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[1];
+				if (s->lineType.getDisplayValue(t) == 1) {
+					return s->evalBSpline(t, controlPoints)[1] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[1];
+				} else {
+					return s->evalLine(t, controlPoints)[1] * s->scale.getDisplayValue(t) + s->pos.getDisplayValue(t)[1];
+				}
 			}
 			ns++;
 		}
@@ -806,8 +814,14 @@ double ceval_curveA(double x, double t, int arg_check) {
 		if (s) {
 			if (s->id == i) {
 				VerticesList controlPoints = s->controlPoints.getDisplayValue();
-				Vec2f p2 = s->evalBSpline(t + 0.001, controlPoints);
-				Vec2f p1 = s->evalBSpline(t, controlPoints);
+				Vec2f p2, p1;
+				if (s->lineType.getDisplayValue(t) == 1) {
+					p2 = s->evalBSpline(t + 0.001, controlPoints);
+					p1 = s->evalBSpline(t, controlPoints);
+				} else {
+					p2 = s->evalLine(t + 0.001, controlPoints);
+					p1 = s->evalLine(t, controlPoints);
+				}
 				float angle = atan2(p2[1] - p1[1], p2[0] - p1[0]);
 				return angle;
 			}
