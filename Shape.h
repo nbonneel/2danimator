@@ -2345,6 +2345,19 @@ public:
 
 		image = nsvgParseFromFile("tmp_123456.svg", "px", 96);
 		//printf("size: %f x %f\n", image->width, image->height);
+
+		for (auto shape = image->shapes; shape != NULL; shape = shape->next) {
+			for (auto path = shape->paths; path != NULL; path = path->next) {
+				float* pt = &path->pts[0];
+				for (int i = 0; i < path->npts; i++) {
+					float* pt = &path->pts[i * 2];
+					minX = std::min(minX, pt[0]);
+					minY = std::min(minY, pt[1]);
+					maxX = std::max(maxX, pt[0]);
+					maxY = std::max(maxY, pt[1]);
+				}
+			}
+		}
 	}
 
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
@@ -2380,7 +2393,7 @@ public:
 		}
 
 		if (displayControls) { // draw Bbox
-			//drawBox(canvas, p[0] - r, p[1] - r, p[0] + r, p[1] + r);
+			drawBox(canvas, minX*s + p[0], minY*s + p[1], maxX*s + p[0], maxY*s + p[1]);
 		}
 
 	}
@@ -2390,7 +2403,10 @@ public:
 	}
 
 	virtual bool Contains(const Vec2f& coord, float time) const {
-		return true;
+		float s = scale.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
+		if ((coord[0] > minX*s + p[0]) && (coord[1] > minY*s + p[1]) && (coord[0] < maxX*s + p[0]) && (coord[1] < maxY*s + p[1])) return true;
+		return false;
 	}
 
 	virtual void SetPosition(float time, const Vec2f& coord) {
@@ -2409,6 +2425,7 @@ public:
 		return scale.getDisplayValue(time);
 	}
 
+	mutable float minX, minY, maxX, maxY;
 	mutable struct NSVGimage* image;
 	mutable std::string lastText;
 	PositionProperty pos;
