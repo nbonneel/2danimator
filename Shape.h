@@ -2194,7 +2194,61 @@ public:
 						cairo_arc(cr, p[0] + position[0] - relativeCenter[0], p[1] + position[1] + relativeCenter[1], diskSize, 0, 2 * M_PI);
 						cairo_fill(cr);
 					}
+
+					if (showBoundary.getDisplayValue()) {
+						if (d3 < 0) {
+							drawBox(canvas, position[0] - relativeCenter[0], position[1] - 200 * s - relativeCenter[1], position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1]);
+						} else {
+							cairo_set_source_rgb(cr, 0., 0., 0.);
+							cairo_set_line_width(cr, 1);
+							Vec3f p0 = transform(Vec3f(minX-cX, minY-cY, minZ-cZ));
+							p0[0] = (p0[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p0[1] = (p0[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p1 = transform(Vec3f(maxX - cX, minY - cY, minZ - cZ));
+							p1[0] = (p1[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p1[1] = (p1[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p2 = transform(Vec3f(minX - cX, maxY - cY, minZ - cZ));
+							p2[0] = (p2[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p2[1] = (p2[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p3 = transform(Vec3f(minX - cX, minY - cY, maxZ - cZ));
+							p3[0] = (p3[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p3[1] = (p3[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p4 = transform(Vec3f(maxX - cX, maxY - cY, minZ - cZ));
+							p4[0] = (p4[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p4[1] = (p4[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p6 = transform(Vec3f(maxX - cX, minY - cY, maxZ - cZ));
+							p6[0] = (p6[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p6[1] = (p6[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p5 = transform(Vec3f(minX - cX, maxY - cY, maxZ - cZ));
+							p5[0] = (p5[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p5[1] = (p5[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							Vec3f p7 = transform(Vec3f(maxX - cX, maxY - cY, maxZ - cZ));
+							p7[0] = (p7[0] / maxSize + 0.5f)*200.f*s + position[0] - relativeCenter[0];
+							p7[1] = (p7[1] / maxSize + 0.5f)*200.f*s + position[1] + relativeCenter[1];
+							cairo_move_to(cr, p0[0], p0[1]);
+							cairo_line_to(cr, p1[0], p1[1]);
+							cairo_line_to(cr, p4[0], p4[1]);
+							cairo_line_to(cr, p2[0], p2[1]);
+							cairo_line_to(cr, p0[0], p0[1]);
+							cairo_line_to(cr, p3[0], p3[1]);							
+							cairo_line_to(cr, p6[0], p6[1]);
+							cairo_line_to(cr, p1[0], p1[1]);
+							cairo_move_to(cr, p2[0], p2[1]);
+							cairo_line_to(cr, p5[0], p5[1]);
+							cairo_line_to(cr, p7[0], p7[1]);
+							cairo_line_to(cr, p4[0], p4[1]);
+							cairo_move_to(cr, p1[0], p1[1]);
+							cairo_line_to(cr, p6[0], p6[1]);
+							cairo_line_to(cr, p7[0], p7[1]);
+							cairo_move_to(cr, p3[0], p3[1]);
+							cairo_line_to(cr, p5[0], p5[1]);
+							cairo_stroke(cr);
+
+						}
+					}
+
 			}
+
 		}
 		if (displayControls) {
 			drawBox(canvas, position[0] - relativeCenter[0], position[1] - 200 * s - relativeCenter[1], position[0] + 200 * s - relativeCenter[0], position[1] - relativeCenter[1]);
