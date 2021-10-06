@@ -213,6 +213,9 @@ std::istream& operator>>(std::istream& is, Shape* &v) {
 	if (type == "PointSet") {
 		v = new PointSet();
 	}
+	if (type == "Latex") {
+		v = new Latex();
+	}
 	if (!v) {
 		std::cout << "invalid Shape" << std::endl;
 		return is;

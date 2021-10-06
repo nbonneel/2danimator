@@ -122,30 +122,40 @@ public:
 	bool hasKeyframe(float time) const {
 		return (values.find(time) != values.end());
 	}
-	friend std::ostream& operator<<(std::ostream& os, const Interpolator<T>& v) {
-		os << v.values.size() << std::endl;
-		for (typename std::map<float, T>::const_iterator it = v.values.begin(); it != v.values.cend(); ++it)
-			os << it->first << " " << it->second << std::endl;
-		os << v.displayValue;
-		return os;
-	}
-	friend std::istream& operator>>(std::istream& is, Interpolator<T>& ve) {
-		int nvalues;
-		is >> nvalues;
-		for (int i = 0; i < nvalues; i++) {
-			float fl;
-			T v;
-			is >> fl;
-			is >> v;
-			ve.values[fl] = v;
-		}
-		is >> ve.displayValue;
-		return is;
-	}
+
 	std::map<float, T> values;
 	T displayValue;
 };
 
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const Interpolator<T>& v) {
+	os << v.values.size() << std::endl;
+	for (typename std::map<float, T>::const_iterator it = v.values.begin(); it != v.values.cend(); ++it)
+		os << it->first << " " << it->second << std::endl;
+	os << v.displayValue;
+	return os;
+}
+
+template<typename T>
+std::istream& operator>>(std::istream& is, Interpolator<T>& ve) {
+	int nvalues;
+	is >> nvalues;
+	for (int i = 0; i < nvalues; i++) {
+		float fl;
+		T v;
+		is >> fl;
+		is >> v;
+		ve.values[fl] = v;
+	}
+	is >> ve.displayValue;
+	return is;
+}
+
+template<>
+std::ostream& operator<<(std::ostream& os, const Interpolator<std::string>& v);
+
+template<>
+std::istream& operator>>(std::istream& is, Interpolator<std::string>& ve);
 
 
 template<>
@@ -1003,7 +1013,7 @@ public:
 	}
 	virtual void print(std::ostream& os) const {
 		os << name << std::endl;
-		os << value <<'¿'<< std::endl; // sorry spain.
+		os << value << std::endl; // sorry spain.
 	}
 	virtual void read(std::istream& is) {
 		char line[25500];
@@ -1012,8 +1022,7 @@ public:
 			name = std::string(line);
 		} while (name == "");
 
-		is.getline(line, 25500, '¿');
-		value = std::string(line);
+		is >> value;
 	}
 	Interpolator<std::string> value;
 	wxTextCtrl *propText;

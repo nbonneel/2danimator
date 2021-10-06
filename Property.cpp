@@ -2,6 +2,31 @@
 #include "animator.h"
 #include "wx/event.h"
 
+template<>
+std::ostream& operator<<(std::ostream& os, const Interpolator<std::string>& v) {
+	os << v.values.size() << std::endl;
+	for (typename std::map<float, std::string>::const_iterator it = v.values.begin(); it != v.values.cend(); ++it)
+		os << it->first << " " << it->second << '¿' << std::endl; // sorry, spain. Use that as delimiter since \n can be used insite text (and I don't want to deal with unicode)
+	os << v.displayValue << '¿';
+	return os;
+}
+
+template<>
+std::istream& operator>>(std::istream& is, Interpolator<std::string>& ve) {
+	int nvalues;
+	is >> nvalues;
+	char line[25500];
+	for (int i = 0; i < nvalues; i++) {
+		float fl;
+		is >> fl;
+		is.getline(line, 25500, '¿');
+		ve.values[fl] = std::string(line);
+	}
+	is.getline(line, 25500, '¿');
+	ve.displayValue = std::string(line);
+	return is;
+}
+
 void PositionProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
 	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
