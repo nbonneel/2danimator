@@ -202,7 +202,10 @@ void AnimatorPanel::updatePropertiesFromControls(wxCommandEvent& event) {
 	for (int i = 0; i < scene->currentShape->parameters.size(); i++) {
 		scene->currentShape->parameters[i]->UpdateParameterFromWidget(scene->currentTime);
 	}	
+	event.Skip();
 };
+
+
 
 void AnimatorPanel::editedVertex(wxListEvent& event) {
 	event.Skip();

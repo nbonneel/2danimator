@@ -2346,6 +2346,8 @@ public:
 		image = nsvgParseFromFile("tmp_123456.svg", "px", 96);
 		//printf("size: %f x %f\n", image->width, image->height);
 
+		minX = 1E9; maxX = -1E9;
+		minY = 1E9; maxY = -1E9;
 		for (auto shape = image->shapes; shape != NULL; shape = shape->next) {
 			for (auto path = shape->paths; path != NULL; path = path->next) {
 				float* pt = &path->pts[0];
