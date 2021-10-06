@@ -1,5 +1,7 @@
 #include "Shape.h"
 #include "animator.h"
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg.h"
 
 void PolygonShape::BSplineSubdivide(float time) {
 	float s = GetScale(time);

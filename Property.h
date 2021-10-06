@@ -964,3 +964,58 @@ public:
 	std::string name;
 	std::vector<std::string> options;
 };
+
+
+class TextAreaProperty : public Property {
+public:
+	TextAreaProperty(std::string val) : name("Text"), Property("TextAreaProperty"), value(val) {};
+	virtual void CreateWidgets(float time);
+	virtual void UpdateWidgets(float time) {
+		std::string v = value.getDisplayValue();
+		propText->SetValue(v);
+
+		if (value.hasKeyframe(time))
+			propText->SetBackgroundColour(wxColour(255, 0, 0));
+		else
+			propText->SetBackgroundColour(wxColour(255, 255, 255));
+	};
+	virtual void UpdateParameterFromWidget(float time) {
+		value.setDisplayValue(propText->GetValue().ToStdString());
+	}
+	virtual void UpdateInternalTime(float time) {
+		value.setDisplayValue(value.getValue(time));
+	}
+	//float eval(float time) const { return eval_string(value.getValue(time).coords[0], time); }
+	void setValue(float time, std::string val) { return value.setValue(time, val); }
+	void setDefaults(std::string name) { this->name = name;};
+
+	virtual void addKeyframe(float time) {
+		value.setValue(time, getDisplayValue(time));
+	}
+	std::string getDisplayValue(float time) const {
+		return value.getDisplayValue();
+	}
+	void setDisplayValue(std::string val) {
+		return value.setDisplayValue(val);
+	}
+	void SetWidgetsNull() {
+		propText = NULL;
+	}
+	virtual void print(std::ostream& os) const {
+		os << name << std::endl;
+		os << value <<'¿'<< std::endl; // sorry spain.
+	}
+	virtual void read(std::istream& is) {
+		char line[25500];
+		do {
+			is.getline(line, 255);
+			name = std::string(line);
+		} while (name == "");
+
+		is.getline(line, 25500, '¿');
+		value = std::string(line);
+	}
+	Interpolator<std::string> value;
+	wxTextCtrl *propText;
+	std::string name;
+};

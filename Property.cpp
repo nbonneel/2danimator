@@ -248,6 +248,25 @@ void EnumProperty::CreateWidgets(float time) {
 	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
 }
 
+void TextAreaProperty::CreateWidgets(float time) {
+	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	property_sizer->Add(spacing_text, 0, wxEXPAND);
+	controlID++;
+
+
+	std::string v = value.getDisplayValue();
+	propText = new wxTextCtrl(myApp->propertiesPanel, controlID, v, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE| wxTE_PROCESS_ENTER);
+	propText->Bind(wxEVT_TEXT_ENTER, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
+	propText->Bind(wxEVT_MOUSE_CAPTURE_LOST, &AnimatorPanel::OnSpinMouseCaptureLost, myApp->animatorPanel);
+	//myApp->animatorPanel->widgetToProperty[propFloat1] = this;
+	controlID++;
+	property_sizer->Add(propText, 1, wxEXPAND);
+
+	property_sizer->Layout();
+	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+}
+
 double Hue(double);
 
 

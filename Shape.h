@@ -7,11 +7,16 @@
 #include "Property.h"
 #include <iostream>
 #include <ostream>
+#include <wx/stdpaths.h>
+#include "nanosvg.h"
+
 using namespace lemon;
 class Spline;
 
 static const float arrow2[] = {7.59, 0, -2.36, 4.06, 0, 0, -2.36, -4.06};
 static int cur_index;
+
+
 
 template<typename T>
 std::string to_string_with_precision(const T a_value, const int n = 6) {
@@ -205,7 +210,7 @@ public:
 			do {
 				is.getline(line, 255);
 				l = std::string(line);
-				l = ltrim(l);
+				l = lefttrim(l);
 			} while (l == "");
 			is >> *(v.parameters[i]);
 		}
@@ -1239,7 +1244,7 @@ public:
 		parameters.push_back((Property*)&this->capEnd);
 		parameters.push_back((Property*)&this->progressStart);
 		parameters.push_back((Property*)&this->progressEnd);
-		parameters.push_back((Property*)&this->controlPoints);
+		parameters.push_back((Property*)&this->controlPoints);		
 	}
 	Spline(const Spline& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), controlPoints(d.controlPoints), thickness(d.thickness), capStart(d.capStart), capEnd(d.capEnd), progressStart(d.progressStart), progressEnd(d.progressEnd), lineType(d.lineType) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
@@ -1334,6 +1339,9 @@ public:
 		cairo_close_path(cr);
 	}
 
+
+
+
 	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
 		VerticesList evalControlPoints = controlPoints.getDisplayValue();
 		float s = scale.getDisplayValue(time);
@@ -1351,6 +1359,7 @@ public:
 		maxX = std::min(maxX - 1, canvas.W - 1);
 		minY = std::max(minY + 1, 0);
 		maxY = std::min(maxY + 1, canvas.H - 1);
+
 
 		if (visible.getDisplayValue()) {
 			int cpStart = capStart.getDisplayValue(time);
@@ -2230,4 +2239,126 @@ public:
 	PointSetProperty pointset;
 	//mutable std::vector<float> coords;
 	//mutable int ndims;
+};
+
+
+class Latex : public Shape {
+public:
+	Latex(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true) :Shape("Latex", visible), pos(position), scale(scale), color(color), text(to_latex("Equation:\n$$\\sqrt{1+x}$$")) {
+
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		image = NULL;
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->text);
+	}
+
+	Latex(const Latex& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), text(d.text), image(NULL) {
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->color);
+		parameters.push_back((Property*)&this->text);
+
+	}
+
+	~Latex() {
+		nsvgDelete(image);
+	}
+
+	std::string to_latex(std::string s) const {
+		std::string result = "\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\thispagestyle{empty}\n\\begin{document}\n" + s + "\n\\end{document}";
+		return result;
+	}
+
+	void parse(float time) const {
+
+		if (image) nsvgDelete(image);
+		//std::string st = to_latex("\\sqrt{5+2x}");
+		std::string st = text.getDisplayValue(time);
+
+		FILE* f = fopen("tmp_123456.tex", "w+");
+		fprintf(f, "%s", st.c_str());
+		fclose(f);
+
+		wxFileName fn(wxStandardPaths::Get().GetExecutablePath());
+		wxString appPath(fn.GetPath());
+		system("latex tmp_123456.tex & dvisvgm -n tmp_123456.dvi");
+
+
+		image = nsvgParseFromFile("tmp_123456.svg", "px", 96);
+		//printf("size: %f x %f\n", image->width, image->height);
+	}
+
+	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
+		float s = scale.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
+		Vec3u color = this->color.getDisplayValue(time);
+
+		if (visible.getDisplayValue()) {
+			std::string txt = text.getDisplayValue(time);
+			if (txt != lastText) {
+				parse(time);
+				lastText = txt;
+			}
+
+			cairo_t *cr = canvas.cr;
+			cairo_set_source_rgb(cr, color[2] / 255.f, color[1] / 255.f, color[0] / 255.f);
+			cairo_set_line_width(cr, 1);
+
+			for (auto shape = image->shapes; shape != NULL; shape = shape->next) {
+				for (auto path = shape->paths; path != NULL; path = path->next) {
+					float* pt = &path->pts[0];
+					cairo_move_to(cr, pt[0] * s + p[0], pt[1] * s + p[1]);
+					for (int i = 0; i < path->npts - 3; i += 3) {
+						float* pt = &path->pts[i * 2];
+						cairo_curve_to(cr, pt[2] * s + p[0], pt[3] * s + p[1], pt[4] * s + p[0], pt[5] * s + p[1], pt[6] * s + p[0], pt[7] * s + p[1]);
+					}
+					if (path->closed)
+						cairo_close_path(cr);
+				}
+				cairo_fill(cr);
+			}
+
+		}
+
+		if (displayControls) { // draw Bbox
+			//drawBox(canvas, p[0] - r, p[1] - r, p[0] + r, p[1] + r);
+		}
+
+	}
+
+	virtual Shape* Clone() {
+		return new Latex(*this);
+	}
+
+	virtual bool Contains(const Vec2f& coord, float time) const {
+		return true;
+	}
+
+	virtual void SetPosition(float time, const Vec2f& coord) {
+
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));  // NEED TO CHECK WHY I DID ABOVE
+
+	}
+	virtual Vec2f GetPosition(float time) {
+		return pos.getDisplayValue(time);
+	}
+
+	virtual void SetScale(float time, float value) {
+		scale.setDisplayValue(Expr(std::to_string(value)));  // NEED TO CHECK WHY I DID ABOVE
+	}
+	virtual float GetScale(float time) {
+		return scale.getDisplayValue(time);
+	}
+
+	mutable struct NSVGimage* image;
+	mutable std::string lastText;
+	PositionProperty pos;
+	ColorProperty color;
+	FloatProperty scale;
+	TextAreaProperty text;
 };

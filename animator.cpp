@@ -559,6 +559,9 @@ bool AnimatorApp::OnInit() {
 
 	panelObject_sizer->Add(addObjectButton("Point Set", new PointSet(Vec2s("200", "200"), "1", Vec3u(212, 61, 81)), panelObject, animatorPanel), 0, wxEXPAND);
 
+	panelObject_sizer->Add(addObjectButton("Latex", new Latex(Vec2s("200", "200"), "1", Vec3u(212, 61, 81)), panelObject, animatorPanel), 0, wxEXPAND);
+
+
 	panelObject->SetSizer(panelObject_sizer);
 
 	m_bookCtrl->AddPage(panelObject, wxT("Add Objects"), false);

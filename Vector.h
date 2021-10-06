@@ -13,23 +13,23 @@ static inline bool is_letter(char l) {
 	//return !((l <= '9'&& l >= '0') || (l == '.'));  // no, may be operators *, /, -
 	return (l >= 'a' && l <= 'z') || (l >= 'A' && l <= 'Z');
 }
-static const char* ws = " \t\n\r\f\v";
+static const char* wss = " \t\n\r\f\v";
 
 // trim from end of string (right)
-inline std::string& rtrim(std::string& s, const char* t = ws) {
+inline std::string& rtrim(std::string& s, const char* t = wss) {
 	s.erase(s.find_last_not_of(t) + 1);
 	return s;
 }
 
 // trim from beginning of string (left)
-inline std::string& ltrim(std::string& s, const char* t = ws) {
+inline std::string& lefttrim(std::string& s, const char* t = wss) {
 	s.erase(0, s.find_first_not_of(t));
 	return s;
 }
 
 // trim from both ends of string (right then left)
-inline std::string& trim(std::string& s, const char* t = ws) {
-	return ltrim(rtrim(s, t), t);
+inline std::string& trim(std::string& s, const char* t = wss) {
+	return lefttrim(rtrim(s, t), t);
 }
 static inline std::string replace_variable(const std::string& s, float t, char var = 't') {
 	std::string newstring; newstring.reserve(s.size());
@@ -111,7 +111,7 @@ std::istream& operator>>(std::istream& is, Vector<T, DIM>& v) {
 	for (int i = 0; i < DIM; i++) {
 		std::string s1;
 		std::getline(is, s1, ';');
-		s1 = ltrim(s1);
+		s1 = lefttrim(s1);
 		std::stringstream ss(s1);
 		ss >> v.coords[i];
 	}
@@ -122,7 +122,7 @@ std::istream& operator>>(std::istream& is, Vector<unsigned char, DIM>& v) {
 	for (int i = 0; i < DIM; i++) {
 		std::string s1;
 		std::getline(is, s1, ';');
-		s1 = ltrim(s1);
+		s1 = lefttrim(s1);
 		std::stringstream ss(s1);
 		int val;
 		ss >> val;
@@ -401,7 +401,7 @@ public:
 		for (int i = 0; i < DIM; i++) {
 			std::string s1;
 			std::getline(is, s1, ';');
-			s1 = ltrim(s1);
+			s1 = lefttrim(s1);
 			v.coords[i] = s1;
 		}
 		return is;
