@@ -2,12 +2,11 @@
 
 #include "Shape.h"
 
+class ColorProperty;
+
 class Scene {
 public:
-	Scene() {
-		currentShape = NULL;
-		currentTime = 0.f;
-	};
+	Scene();
 
 	void Draw(Canvas &canvas, bool displayControls) const {
 		canvas.erase();
@@ -42,6 +41,7 @@ public:
 		}
 			
 		os << v.currentTime << std::endl;
+		os << *(v.bgColor) << std::endl;
 		return os;
 	}
 	friend std::istream& operator>>(std::istream& is, Scene& v) {
@@ -53,8 +53,11 @@ public:
 			//v.shapes[i] = Shape::create(is);
 		}
 		is >> v.currentTime;
+		is >> *(v.bgColor);
 		return is;
 	}
+
+	ColorProperty *bgColor;
 
 	std::vector<Shape*> shapes;
 	Shape *currentShape, *previousShape;

@@ -18,6 +18,7 @@
 #include "wx/combobox.h"
 #include <fstream>
 
+
 static int controlID = 500;
 
 void RGB2LAB(int R_value, int G_value, int B_value, double *Lab);
@@ -288,7 +289,7 @@ const Points Interpolator<Points>::getValue(float time) const {
 
 class Property {
 public:
-	Property(std::string type = "") :propType(type) {};
+	Property(std::string type = "", wxScrolled<wxPanel>* whichPanel = NULL);
 	virtual void CreateWidgets(float time) = 0;
 	virtual void UpdateWidgets(float time) = 0;
 	virtual void UpdateParameterFromWidget(float time) = 0;
@@ -308,6 +309,7 @@ public:
 		return os;
 	}
 	std::string propType;
+	wxScrolled<wxPanel> *panel;
 };
 
 std::ostream& operator<<(std::ostream& os, const Property* v);
@@ -315,7 +317,7 @@ std::istream& operator>>(std::istream& is, Property* &v);
 
 class PositionProperty : public Property {
 public :
-	PositionProperty(Vec2s defaultPosition = Vec2s("0", "0")) : position(defaultPosition), name("Position"), Property("PositionProperty"){};
+	PositionProperty(Vec2s defaultPosition = Vec2s("0", "0"), wxScrolled<wxPanel>* whichPanel = NULL) : position(defaultPosition), name("Position"), Property("PositionProperty", whichPanel){};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		Vec2s v = position.getDisplayValue();
@@ -402,7 +404,7 @@ public :
 
 class FloatProperty : public Property {
 public:
-	FloatProperty(Expr defaultValue = Expr("1")) : value(defaultValue), minVal(-100.f), maxVal(100.f), step(0.05f), name("Scale"), Property("FloatProperty") {};
+	FloatProperty(Expr defaultValue = Expr("1"), wxScrolled<wxPanel>* whichPanel = NULL) : value(defaultValue), minVal(-100.f), maxVal(100.f), step(0.05f), name("Scale"), Property("FloatProperty", whichPanel) {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		Expr v = value.getDisplayValue();
@@ -470,7 +472,7 @@ public:
 
 class IntProperty : public Property {
 public:
-	IntProperty(int defaultValue = 0) : value(defaultValue), minVal(0), maxVal(100), name("Nb X ticks"), Property("IntProperty") {};
+	IntProperty(int defaultValue = 0, wxScrolled<wxPanel>* whichPanel = NULL) : value(defaultValue), minVal(0), maxVal(100), name("Nb X ticks"), Property("IntProperty", whichPanel) {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		int v = value.getDisplayValue();
@@ -526,7 +528,7 @@ public:
 
 class ColorProperty : public Property {
 public:
-	ColorProperty(const Vec3u& defaultColor = Vec3u(0,0,0), std::string propertyName = "Color"):color(defaultColor), propertyName(propertyName), Property("ColorProperty") {};
+	ColorProperty(const Vec3u& defaultColor = Vec3u(0,0,0), std::string propertyName = "Color", wxScrolled<wxPanel>* whichPanel = NULL):color(defaultColor), propertyName(propertyName), Property("ColorProperty", whichPanel) {};
 	void setName(std::string propertyName) { this->propertyName = propertyName; }
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
@@ -584,7 +586,7 @@ public:
 
 class VerticesListProperty : public Property {
 public:
-	VerticesListProperty(): Property("VerticesListProperty"){};
+	VerticesListProperty(wxScrolled<wxPanel>* whichPanel = NULL): Property("VerticesListProperty", whichPanel){};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		if (!propListVertices) return;		
@@ -661,7 +663,7 @@ public:
 
 class BoolProperty : public Property {
 public:
-	BoolProperty(bool defaultValue = true) : value(defaultValue), name("Visible"), Property("BoolProperty") {};
+	BoolProperty(bool defaultValue = true, wxScrolled<wxPanel>* whichPanel = NULL) : value(defaultValue), name("Visible"), Property("BoolProperty", whichPanel) {};
 
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
@@ -709,7 +711,7 @@ public:
 
 class ExprProperty : public Property {
 public:
-	ExprProperty(std::string defaultValue = "x") : value(defaultValue), Property("ExprProperty") {};
+	ExprProperty(std::string defaultValue = "x", wxScrolled<wxPanel>* whichPanel = NULL) : value(defaultValue), Property("ExprProperty", whichPanel) {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		std::string v = value.getDisplayValue();
@@ -756,7 +758,7 @@ public:
 
 class FilenameProperty : public Property {
 public:
-	FilenameProperty(std::string defaultValue = "", std::string fileName = "File") :filename(defaultValue), propertyName(propertyName), Property("FilenameProperty") {};
+	FilenameProperty(std::string defaultValue = "", std::string fileName = "File", wxScrolled<wxPanel>* whichPanel = NULL) :filename(defaultValue), propertyName(propertyName), Property("FilenameProperty", whichPanel) {};
 	void setName(std::string propertyName) { this->propertyName = propertyName; }
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
@@ -813,7 +815,7 @@ public:
 
 class PointSetProperty : public Property {
 public:
-	PointSetProperty() : Property("PointSetProperty"), propertyName("Point set"){ };
+	PointSetProperty(wxScrolled<wxPanel>* whichPanel = NULL) : Property("PointSetProperty", whichPanel), propertyName("Point set"){ };
 	void setName(std::string propertyName) { this->propertyName = propertyName; }
 
 	virtual void CreateWidgets(float time);
@@ -922,7 +924,7 @@ public:
 
 class EnumProperty : public Property {
 public:
-	EnumProperty(int val) : name("options"), Property("EnumProperty"), value(val) {};
+	EnumProperty(int val, wxScrolled<wxPanel>* whichPanel = NULL) : name("options"), Property("EnumProperty", whichPanel), value(val) {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		int v = value.getDisplayValue();
@@ -978,7 +980,7 @@ public:
 
 class TextAreaProperty : public Property {
 public:
-	TextAreaProperty(std::string val) : name("Text"), Property("TextAreaProperty"), value(val) {};
+	TextAreaProperty(std::string val, wxScrolled<wxPanel>* whichPanel = NULL) : name("Text"), Property("TextAreaProperty", whichPanel), value(val) {};
 	virtual void CreateWidgets(float time);
 	virtual void UpdateWidgets(float time) {
 		std::string v = value.getDisplayValue();

@@ -190,6 +190,8 @@ void AnimatorPanel::update_time_values(wxCommandEvent& event) {
 		for (int j = 0; j < scene->shapes[i]->parameters.size(); j++) {
 			scene->shapes[i]->parameters[j]->UpdateInternalTime(scene->currentTime);
 		}
+	if (scene->bgColor)
+		scene->bgColor->UpdateInternalTime(scene->currentTime);
 
 	//updatePropertiesFromControls(event);
 	//updateControlValues();
@@ -203,6 +205,8 @@ void AnimatorPanel::updatePropertiesFromControls(wxCommandEvent& event) {
 	for (int i = 0; i < scene->currentShape->parameters.size(); i++) {
 		scene->currentShape->parameters[i]->UpdateParameterFromWidget(scene->currentTime);
 	}	
+	if (scene->bgColor)
+		scene->bgColor->UpdateParameterFromWidget(scene->currentTime);
 	event.Skip();
 };
 
@@ -224,6 +228,9 @@ void AnimatorPanel::updateControlValues() {
 	for (int i = 0; i < myApp->animatorPanel->scene->currentShape->parameters.size(); i++) {
 		myApp->animatorPanel->scene->currentShape->parameters[i]->UpdateWidgets(myApp->animatorPanel->scene->currentTime);
 	}
+	if (myApp->animatorPanel->scene->bgColor)
+		myApp->animatorPanel->scene->bgColor->UpdateWidgets(myApp->animatorPanel->scene->currentTime);
+
 	myApp->animatorPanel->paintNow();
 };
 
@@ -480,16 +487,26 @@ void AnimatorApp::DestroySizer(wxSizerItemList toremove) {
 			}
 		}
 	}
-	myApp->panelProperties_sizer->Layout();
+	myApp->propertiesPanel->GetSizer()->Layout();
 }
 
 void AnimatorApp::setupPanelProperties(Shape* shape) {
+	// temp hack for background color. Otherwise, bgcolor cannot be keyframed. Todo: fix.
+	ClickableColourPicker* bgcolpick = NULL;
+	for (auto it = myApp->animatorPanel->colorwidgetToProperty.begin(); it != myApp->animatorPanel->colorwidgetToProperty.end(); ++it)
+		if (it->second == myApp->animatorPanel->scene->bgColor)
+			bgcolpick = it->first;
+
 	myApp->animatorPanel->widgetToProperty.clear();
 	myApp->animatorPanel->colorwidgetToProperty.clear();
 	myApp->animatorPanel->filenamewidgetToProperty.clear();
 	myApp->animatorPanel->textwidgetToProperty.clear();
 
-	wxSizerItemList sil = panelProperties_sizer->GetChildren();
+	if (bgcolpick) {
+		myApp->animatorPanel->colorwidgetToProperty[bgcolpick] = myApp->animatorPanel->scene->bgColor;
+	}
+
+	wxSizerItemList sil = propertiesPanel->GetSizer()->GetChildren();
 	CallAfter(&AnimatorApp::DestroySizer, sil);
 
 	for (int i = 0; i < shape->parameters.size(); i++) {
@@ -526,15 +543,31 @@ bool AnimatorApp::OnInit() {
 
 	m_bookCtrl = new wxNotebook(frame, wxID_ANY, wxDefaultPosition, wxSize(200, 100), 0);
 
+	propertiesPanel = new wxScrolled<wxPanel>(m_bookCtrl);
+	wxBoxSizer *panelProperties_sizer = new wxBoxSizer(wxVERTICAL);
+	propertiesPanel->SetSizer(panelProperties_sizer);
+
+	panelViewport = new wxScrolled<wxPanel>(m_bookCtrl);
+	wxBoxSizer *panelViewport_sizer = new wxBoxSizer(wxVERTICAL);
+	panelViewport->SetSizer(panelViewport_sizer);
+
 	wxScrolled<wxPanel> *panelObject = new wxScrolled<wxPanel>(m_bookCtrl);
+	wxBoxSizer * panelObject_sizer = new wxBoxSizer(wxVERTICAL);
+	panelObject->SetSizer(panelObject_sizer);
+
+	
+
+	animatorPanel->scene = new Scene();
+
+	propertiesPanel->EnableScrolling(true, true);
+	propertiesPanel->SetScrollbars(5, 10, 20, 60);
+	
+	
 	panelObject->EnableScrolling(true, true);
 	panelObject->SetScrollbars(5, 10, 20, 60);
-
-	wxBoxSizer * panelObject_sizer = new wxBoxSizer(wxVERTICAL);
 	
 	panelObject_sizer->Add(addObjectButton("Disk", new Disk(Vec2s("50", "50"), "30", Vec3u(241, 198, 198), Vec3u(226,112,118), "5"), panelObject, animatorPanel) , 0, wxEXPAND);
-	PolygonShape* defaultPolygon = new PolygonShape(Vec2s("175", "125"), "1", "0", Vec3u(87, 161, 139), Vec3u(0,63,92), "5");
-	//PolygonShape* defaultPolygon = new PolygonShape(Vec2s("0", "0"), "1", "0", Vec3u(255, 0, 0), Vec3u(0, 0, 0), "2");
+	PolygonShape* defaultPolygon = new PolygonShape(Vec2s("175", "125"), "1", "0", Vec3u(87, 161, 139), Vec3u(0,63,92), "5");	
 	defaultPolygon->addVertex(-1.f, Vec2f(150-175, 50 - 125));
 	defaultPolygon->addVertex(-1.f, Vec2f(200 - 175, 90- 125));
 	defaultPolygon->addVertex(-1.f, Vec2f(200 - 175, 150 - 125));
@@ -567,19 +600,18 @@ bool AnimatorApp::OnInit() {
 
 	panelObject_sizer->Add(addObjectButton("Image", new Image(Vec2s("200", "200"), "1"), panelObject, animatorPanel), 0, wxEXPAND);
 
-
-	panelObject->SetSizer(panelObject_sizer);
-
-	m_bookCtrl->AddPage(panelObject, wxT("Add Objects"), false);
-
-
-	propertiesPanel = new wxScrolled<wxPanel>(m_bookCtrl);
-	m_bookCtrl->AddPage(propertiesPanel, wxT("Properties"), false);
-	propertiesPanel->EnableScrolling(true, true);
-	propertiesPanel->SetScrollbars(5, 10, 20, 60);
-	panelProperties_sizer = new wxBoxSizer(wxVERTICAL);
 	
-	propertiesPanel->SetSizer(panelProperties_sizer);
+
+	m_bookCtrl->AddPage(panelObject, wxT("Add Objects"), false);	
+	m_bookCtrl->AddPage(propertiesPanel, wxT("Properties"), false);
+
+
+	panelViewport->EnableScrolling(true, true);
+	panelViewport->SetScrollbars(5, 10, 20, 60);
+	
+	m_bookCtrl->AddPage(panelViewport, wxT("Viewport"), false);
+	
+
 
 	wxBoxSizer * renderSuperSizer_sizer = new wxBoxSizer(wxVERTICAL);
 	renderSuperSizer_sizer->Add(animatorPanel, 5, wxEXPAND);
@@ -596,6 +628,8 @@ bool AnimatorApp::OnInit() {
 	frame->SetSizer(sizer);
 	sizer->Add(renderSuperSizer_sizer, 2, wxEXPAND);
 	sizer->Add(m_bookCtrl, 1, wxEXPAND);
+
+	
 
 	activateRenderLoop(true);
 	frame->Show();

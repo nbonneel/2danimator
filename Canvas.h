@@ -28,10 +28,7 @@ public:
 
 		cr = cairo_create(surface);
 	};
-	void erase() {
-		memset(&pixels[0], 255, W*H*4 * sizeof(pixels[0]));
-		memset(&imgNoAlpha[0], 255, W*H * 3 * sizeof(pixels[0]));
-	}
+	void erase();
 	unsigned char& operator()(int x, int y, int c) { return pixels[y*W * 4 + x * 4 + c+0]; }
 	unsigned char operator()(int x, int y, int c) const { return pixels[y*W * 4 + x * 4 + c+0]; }
 	void removeAlpha() {

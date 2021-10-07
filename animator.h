@@ -46,7 +46,7 @@ public:
 	AnimatorPanel(AnimatorFrame* parent, AnimatorApp* app, int W, int H) :wxPanel(parent) {
 		Connect(wxEVT_PAINT, wxPaintEventHandler(AnimatorPanel::paintEvent));
 		
-		scene = new Scene();
+
 		animatorApp = app;
 		cur_img = Canvas(W, H);
 		this->W = W;
@@ -265,10 +265,9 @@ public:
 	AnimatorFrame *animatorFrame;
 	wxSlider* time_slider;
 	wxNotebook* m_bookCtrl;
-	wxScrolled<wxPanel>* propertiesPanel;
-	wxBoxSizer * panelProperties_sizer;
-
+	wxScrolled<wxPanel> *propertiesPanel, *panelViewport;	
 	wxStaticText* infoBar;
+	
 
 	DECLARE_EVENT_TABLE();
 };

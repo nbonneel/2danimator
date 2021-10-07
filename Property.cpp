@@ -2,6 +2,9 @@
 #include "animator.h"
 #include "wx/event.h"
 
+extern AnimatorApp* myApp;
+
+
 template<>
 std::ostream& operator<<(std::ostream& os, const Interpolator<std::string>& v) {
 	os << v.values.size() << std::endl;
@@ -27,9 +30,12 @@ std::istream& operator>>(std::istream& is, Interpolator<std::string>& ve) {
 	return is;
 }
 
+Property::Property(std::string type, wxScrolled<wxPanel>* whichPanel):propType(type), panel(whichPanel?whichPanel: myApp->propertiesPanel){	
+};
+
 void PositionProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
@@ -37,8 +43,8 @@ void PositionProperty::CreateWidgets(float time) {
 	Vec2s s = position.getDisplayValue();
 	double v1 = ceval_result2(replace_variable(s[0], time));
 	double v2 = ceval_result2(replace_variable(s[1], time));
-	propFloat1 = new SpinRegex(myApp->propertiesPanel, controlID, s[0], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10000, 10000, v1, 0.05);
-	propFloat2 = new SpinRegex(myApp->propertiesPanel, controlID + 1, s[1], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10000, 10000, v2, 0.05);
+	propFloat1 = new SpinRegex(panel, controlID, s[0], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10000, 10000, v1, 0.05);
+	propFloat2 = new SpinRegex(panel, controlID + 1, s[1], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -10000, 10000, v2, 0.05);
 	propFloat1->dim_id = 0;
 	propFloat1->dim = 2;
 	propFloat2->dim_id = 1;
@@ -65,19 +71,19 @@ void PositionProperty::CreateWidgets(float time) {
 	property_sizer->Add(propFloat2, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void FloatProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 
 	Expr s = value.getDisplayValue();
 	double v = ceval_result2(replace_variable(s[0], time));
-	propFloat1 = new SpinRegex(myApp->propertiesPanel, controlID, s[0], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, minVal, maxVal, v, step);
+	propFloat1 = new SpinRegex(panel, controlID, s[0], wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, minVal, maxVal, v, step);
 	propFloat1->dim_id = 0;
 	propFloat1->dim = 1;
 	propFloat1->Bind(wxEVT_SPINCTRLDOUBLE, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
@@ -89,18 +95,18 @@ void FloatProperty::CreateWidgets(float time) {
 	property_sizer->Add(propFloat1, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void IntProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 
 	int v = value.getDisplayValue();
-	propInt = new wxSpinCtrl(myApp->propertiesPanel, controlID, std::to_string(v), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, minVal, maxVal, v);
+	propInt = new wxSpinCtrl(panel, controlID, std::to_string(v), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, minVal, maxVal, v);
 	propInt->Bind(wxEVT_SPINCTRL, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	//propInt->Bind(wxEVT_LEFT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
 	propInt->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
@@ -110,18 +116,18 @@ void IntProperty::CreateWidgets(float time) {
 	property_sizer->Add(propInt, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void ColorProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, propertyName);
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, propertyName);
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 	//unsigned char* u = (unsigned char*)shape->parameters[i]->firstParam + num_param;
 	Vec3u v = color.getValue(time);
-	colorPicker = new ClickableColourPicker(myApp->propertiesPanel, controlID, wxColour(v[0], v[1], v[2]), wxDefaultPosition, wxDefaultSize, wxCLRP_USE_TEXTCTRL | wxCLRP_SHOW_LABEL);
+	colorPicker = new ClickableColourPicker(panel, controlID, wxColour(v[0], v[1], v[2]), wxDefaultPosition, wxDefaultSize, wxCLRP_USE_TEXTCTRL | wxCLRP_SHOW_LABEL);
 	colorPicker->Bind(wxEVT_COLOURPICKER_CHANGED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	colorPicker->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::colourMouseUp, myApp->animatorPanel);
 
@@ -131,18 +137,18 @@ void ColorProperty::CreateWidgets(float time) {
 	property_sizer->Add(colorPicker, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void FilenameProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, propertyName);
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, propertyName);
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 	//unsigned char* u = (unsigned char*)shape->parameters[i]->firstParam + num_param;
 	std::string fname = filename.getValue(time);
-	filePicker = new ClickableFilePicker(myApp->propertiesPanel, controlID, fname, wxFileSelectorPromptStr, "*.*", wxDefaultPosition, wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
+	filePicker = new ClickableFilePicker(panel, controlID, fname, wxFileSelectorPromptStr, "*.*", wxDefaultPosition, wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
 	filePicker->Bind(wxEVT_FILEPICKER_CHANGED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	filePicker->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::filenameMouseUp, myApp->animatorPanel);
 
@@ -152,17 +158,17 @@ void FilenameProperty::CreateWidgets(float time) {
 	property_sizer->Add(filePicker, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 void PointSetProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, propertyName);
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, propertyName);
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 	//unsigned char* u = (unsigned char*)shape->parameters[i]->firstParam + num_param;
 	std::string fname = filename.getValue(time);
-	filePicker = new ClickableFilePicker(myApp->propertiesPanel, controlID, fname, wxFileSelectorPromptStr, "*.*", wxDefaultPosition, wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
+	filePicker = new ClickableFilePicker(panel, controlID, fname, wxFileSelectorPromptStr, "*.*", wxDefaultPosition, wxDefaultSize, wxFLP_USE_TEXTCTRL | wxFLP_OPEN | wxFLP_FILE_MUST_EXIST);
 	filePicker->Bind(wxEVT_FILEPICKER_CHANGED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	filePicker->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::filenameMouseUp, myApp->animatorPanel);
 
@@ -172,13 +178,13 @@ void PointSetProperty::CreateWidgets(float time) {
 	property_sizer->Add(filePicker, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 
 void VerticesListProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, "Vertices");
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, "Vertices");
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
@@ -186,7 +192,7 @@ void VerticesListProperty::CreateWidgets(float time) {
 	int numP = vl.size();
 
 	//float* f = (float*)shape->parameters[i]->firstParam + num_param;
-	propListVertices = new wxListCtrl(myApp->propertiesPanel, controlID, wxDefaultPosition, wxSize(-1, 100), wxLC_REPORT | wxLC_EDIT_LABELS);
+	propListVertices = new wxListCtrl(panel, controlID, wxDefaultPosition, wxSize(-1, 100), wxLC_REPORT | wxLC_EDIT_LABELS);
 	wxListItem itCol;
 	itCol.SetId(0);
 	itCol.SetText("Vertex");
@@ -204,19 +210,19 @@ void VerticesListProperty::CreateWidgets(float time) {
 	property_sizer->Add(propListVertices, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 
 void BoolProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 	//bool* b = (bool*)shape->parameters[i]->firstParam + num_param;
 	bool b = value.getValue(time);
-	propBool = new wxCheckBox(myApp->propertiesPanel, controlID, "", wxDefaultPosition, wxDefaultSize);
+	propBool = new wxCheckBox(panel, controlID, "", wxDefaultPosition, wxDefaultSize);
 	propBool->SetValue(b);
 	propBool->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	//boolcontrols[propBool] = b;
@@ -226,18 +232,18 @@ void BoolProperty::CreateWidgets(float time) {
 	property_sizer->Add(propBool, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void ExprProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, "Expression y=");
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, "Expression y=");
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 
 	std::string s = value.getDisplayValue();
-	propString = new wxTextCtrl(myApp->propertiesPanel, controlID, s, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
+	propString = new wxTextCtrl(panel, controlID, s, wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
 	propString->Bind(wxEVT_TEXT_ENTER, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	propString->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::textMouseUp, myApp->animatorPanel);
 	propString->Bind(wxEVT_MOUSE_CAPTURE_LOST, &AnimatorPanel::OnSpinMouseCaptureLost, myApp->animatorPanel);
@@ -246,12 +252,12 @@ void ExprProperty::CreateWidgets(float time) {
 	property_sizer->Add(propString, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void EnumProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
@@ -260,7 +266,7 @@ void EnumProperty::CreateWidgets(float time) {
 	wxArrayString choices;
 	for (int i=0; i<options.size(); i++)
 		choices.Add(options[i]);
-	propEnum = new wxComboBox(myApp->propertiesPanel, controlID, options[v], wxDefaultPosition, wxDefaultSize, choices);
+	propEnum = new wxComboBox(panel, controlID, options[v], wxDefaultPosition, wxDefaultSize, choices);
 	propEnum->Bind(wxEVT_COMBOBOX, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	//propInt->Bind(wxEVT_LEFT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
 	//propEnum->Bind(wxEVT_RIGHT_UP, &AnimatorPanel::spinMouseUp, myApp->animatorPanel);
@@ -270,18 +276,18 @@ void EnumProperty::CreateWidgets(float time) {
 	property_sizer->Add(propEnum, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 void TextAreaProperty::CreateWidgets(float time) {
 	wxBoxSizer * property_sizer = new wxBoxSizer(wxHORIZONTAL);
-	wxStaticText* spacing_text = new wxStaticText(myApp->propertiesPanel, controlID, name.c_str());
+	wxStaticText* spacing_text = new wxStaticText(panel, controlID, name.c_str());
 	property_sizer->Add(spacing_text, 0, wxEXPAND);
 	controlID++;
 
 
 	std::string v = value.getDisplayValue();
-	propText = new wxTextCtrl(myApp->propertiesPanel, controlID, v, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE| wxTE_PROCESS_ENTER);
+	propText = new wxTextCtrl(panel, controlID, v, wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE| wxTE_PROCESS_ENTER);
 	propText->Bind(wxEVT_TEXT_ENTER, &AnimatorPanel::updatePropertiesFromControls, myApp->animatorPanel);
 	propText->Bind(wxEVT_MOUSE_CAPTURE_LOST, &AnimatorPanel::OnSpinMouseCaptureLost, myApp->animatorPanel);
 	//myApp->animatorPanel->widgetToProperty[propFloat1] = this;
@@ -289,7 +295,7 @@ void TextAreaProperty::CreateWidgets(float time) {
 	property_sizer->Add(propText, 1, wxEXPAND);
 
 	property_sizer->Layout();
-	myApp->panelProperties_sizer->Add(property_sizer, 0, wxEXPAND);
+	panel->GetSizer()->Add(property_sizer, 0, wxEXPAND);
 }
 
 double Hue(double);
