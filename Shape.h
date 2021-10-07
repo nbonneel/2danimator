@@ -9,6 +9,7 @@
 #include <ostream>
 #include <wx/stdpaths.h>
 #include "nanosvg.h"
+#include "stb_image.h"
 
 using namespace lemon;
 class Spline;
@@ -1963,7 +1964,7 @@ public:
 
 class PointSet : public Shape {
 public:
-	PointSet(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string pointSize = "1") : Shape("PointSet", visible), pos(position), scale(scale), color(color), dim1(0), dim2(1), dim3(-1), pointSize(Expr("5")), rotX(Expr("0")), rotY(Expr("0")), rotZ(Expr("0")), showBoundary(true) {
+	PointSet(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", const Vec3u &color = Vec3u(255, 0, 0), bool visible = true, std::string pointSize = "1") : Shape("PointSet", visible), pos(position), scale(scale), color(color), dim1(0), dim2(1), dim3(-1), pointSize(Expr("5")), rotX(Expr("0")), rotY(Expr("0")), rotZ(Expr("0")), showBoundary(true), progress(Expr("100")) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->pointSize.setDefaults("Point size", 0.f, 1000.f, 1.f);
 		this->showBoundary.name = "Show domain boundary";
@@ -1973,6 +1974,7 @@ public:
 		this->rotX.setDefaults("Rot. X", -3600, 3600, 0.01);
 		this->rotY.setDefaults("Rot. Y", -3600, 3600, 0.01);
 		this->rotZ.setDefaults("Rot. Z", -3600, 3600, 0.01);
+		this->progress.setDefaults("Loading progress", 0, 100, 0.5);
 
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
@@ -1986,9 +1988,10 @@ public:
 		parameters.push_back((Property*)&this->rotY);
 		parameters.push_back((Property*)&this->rotZ);
 		parameters.push_back((Property*)&this->showBoundary);
+		parameters.push_back((Property*)&this->progress);
 
 	}
-	PointSet(const PointSet& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), pointSize(d.pointSize), showBoundary(d.showBoundary), pointset(d.pointset), dim1(d.dim1), dim2(d.dim2), dim3(d.dim3), rotX(d.rotX), rotY(d.rotY), rotZ(d.rotZ) {
+	PointSet(const PointSet& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), color(d.color), pointSize(d.pointSize), showBoundary(d.showBoundary), pointset(d.pointset), dim1(d.dim1), dim2(d.dim2), dim3(d.dim3), rotX(d.rotX), rotY(d.rotY), rotZ(d.rotZ), progress(d.progress) {
 		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
 		this->pointSize.setDefaults("Point size", 0.f, 1000.f, 1.f);
 		this->showBoundary.name = "Show domain boundary";
@@ -1998,7 +2001,7 @@ public:
 		this->rotX.setDefaults("Rot. X", -3600, 3600, 0.01);
 		this->rotY.setDefaults("Rot. Y", -3600, 3600, 0.01);
 		this->rotZ.setDefaults("Rot. Z", -3600, 3600, 0.01);
-
+		this->progress.setDefaults("Loading progress", 0, 100, 0.5);
 
 		parameters.push_back((Property*)&this->pos);
 		parameters.push_back((Property*)&this->scale);
@@ -2012,6 +2015,7 @@ public:
 		parameters.push_back((Property*)&this->rotY);
 		parameters.push_back((Property*)&this->rotZ);
 		parameters.push_back((Property*)&this->showBoundary);
+		parameters.push_back((Property*)&this->progress);
 
 	}
 
@@ -2165,6 +2169,7 @@ public:
 				    rx = rotX.getDisplayValue(time);
 					ry = rotY.getDisplayValue(time);
 					rz = rotZ.getDisplayValue(time);
+					float prog = progress.getDisplayValue(time);
 					float minX = 1E9, minY = 1E9, maxX = -1E9, maxY = -1E9, minZ = 1E9, maxZ=-1E9;
 					getBBox3(time, minX, minY, minZ, maxX, maxY, maxZ);
 					
@@ -2175,7 +2180,7 @@ public:
 
 					cairo_t *cr = canvas.cr;
 
-					for (int i = 0; i < pts.npoints(); i++) {
+					for (int i = 0; i < std::min(pts.npoints(), (int)(pts.npoints()*prog/100.+0.5)); i++) {
 						if (coltext == "id")
 							cairo_set_source_rgb(cr, ((i*1234+456)%256) / 255.f, ((i * 3123 + 252) % 256) / 255.f, ((i * 4123 + 56) % 256) / 255.f);
 						else
@@ -2287,7 +2292,7 @@ public:
 
 	PositionProperty pos;
 	ColorProperty color;
-	FloatProperty scale, pointSize, rotX, rotY, rotZ;
+	FloatProperty scale, pointSize, rotX, rotY, rotZ, progress;
 	BoolProperty showBoundary;
 	IntProperty dim1, dim2, dim3;
 	PointSetProperty pointset;
@@ -2434,4 +2439,150 @@ public:
 	ColorProperty color;
 	FloatProperty scale;
 	TextAreaProperty text;
+};
+
+
+
+class Image : public Shape {
+public:
+	Image(const Vec2s& position = Vec2s("0", "0"), std::string scale = "1", bool visible = true) :Shape("Image", visible), pos(position), scale(scale), rotation(Expr("0")), filename(""), opacity(Expr("1")) {
+
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->rotation.setDefaults("rotation", -36000.f, 36000.f, 0.01f);	
+		this->opacity.setDefaults("opacity", 0.f, 1.f, 0.05f);
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->rotation);
+		parameters.push_back((Property*)&this->filename);
+		parameters.push_back((Property*)&this->opacity);
+		
+		image = NULL;
+	}
+
+	Image(const Image& d) : Shape(d.shapeType, true), pos(d.pos), scale(d.scale), rotation(d.rotation), filename(d.filename), image(NULL), opacity(d.opacity) {
+		this->scale.setDefaults("Scale", 0.f, 10000.f, 0.05f);
+		this->rotation.setDefaults("rotation", -36000.f, 36000.f, 0.01f);
+		this->opacity.setDefaults("opacity", 0.f, 1.f, 0.05f);
+
+		parameters.push_back((Property*)&this->pos);
+		parameters.push_back((Property*)&this->scale);
+		parameters.push_back((Property*)&this->rotation);
+		parameters.push_back((Property*)&this->filename);
+		parameters.push_back((Property*)&this->opacity);
+	}
+	~Image() {
+		if (image) cairo_surface_destroy(image);
+	}
+
+
+	void loadimage(float time) const {
+		if (image) cairo_surface_destroy(image);
+		std::string fname = filename.getDisplayValue(time);		
+		int w, h, c;
+		unsigned char* val = stbi_load(fname.c_str(), &w, &h, &c, STBI_rgb_alpha);
+		for (int i = 0; i < w*h; i++) {
+			val[i * 4 + 0] = val[i * 4 + 0]/255.* val[i * 4 + 3]; // premultiplied alpha
+			val[i * 4 + 1] = val[i * 4 + 1] / 255. * val[i * 4 + 3]; // premultiplied alpha
+			val[i * 4 + 2] = val[i * 4 + 2] / 255. * val[i * 4 + 3]; // premultiplied alpha
+		}
+		int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, w);
+		image = cairo_image_surface_create_for_data(val,CAIRO_FORMAT_ARGB32, w, h,stride);	
+	}
+
+	virtual void Draw(Canvas& canvas, float time, bool displayControls) const {
+		float s = scale.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
+		cairo_t *cr = canvas.cr;
+
+		if (visible.getDisplayValue()) {
+			std::string txt = filename.getDisplayValue(time);
+			if (txt != lastFilename && txt.size() > 0) {
+				loadimage(time);
+				lastFilename = txt;
+			}			
+			if (image) {
+				int w = cairo_image_surface_get_width(image);
+				if (w > 0) {
+					float rot = rotation.getDisplayValue(time);
+					int h = cairo_image_surface_get_height(image);
+					float scal = 256.0 / w * s;
+					cairo_identity_matrix(cr);
+					cairo_translate(cr, p[0], p[1]);
+					cairo_rotate(cr, rot);
+					cairo_scale(cr, scal, scal);
+					//cairo_translate(cr, -0.5*w + (p[0] * cos(rot) + p[1] * sin(rot)) / scal, -0.5*h + (-p[0] * sin(rot) + p[1] * cos(rot)) / scal);
+					cairo_translate(cr, -0.5*w, -0.5*h);
+					cairo_set_source_surface(cr, image, 0, 0);
+					cairo_paint_with_alpha(cr, opacity.getDisplayValue(time));
+				}
+			}
+		}
+
+		if (displayControls) { // draw Bbox
+			//drawBox(canvas, minX*s + p[0], minY*s + p[1], maxX*s + p[0], maxY*s + p[1]);
+			cairo_set_source_rgb(cr, 0., 0, 0);
+			cairo_set_line_width(cr, 1);
+			if (image) {
+				int w = cairo_image_surface_get_width(image);
+				if (w > 0) {
+					int h = cairo_image_surface_get_height(image);
+					cairo_rectangle(cr,  0,0, w, h);				
+				} else {
+					cairo_rectangle(cr, 128, 128, 256, 256);
+				}
+			} else {
+				cairo_rectangle(cr, 128, 128, 256, 256);
+			}
+			cairo_stroke(cr);
+		}
+		cairo_identity_matrix(cr);
+
+	}
+
+	virtual Shape* Clone() {
+		return new Image(*this);
+	}
+
+	virtual bool Contains(const Vec2f& coord, float time) const {
+		float s = scale.getDisplayValue(time);
+		Vec2f p = pos.getDisplayValue(time);
+		if (image) {
+			float rot = rotation.getDisplayValue(time);
+			int w = cairo_image_surface_get_width(image);
+			int h = cairo_image_surface_get_height(image);
+			float scal = 256.0 / w * s;
+			Vec2f invTransformCoord;
+			p = coord-p;
+			invTransformCoord[0] =  0.5*w + (p[0] * cos(rot) + p[1] * sin(rot)) / scal;
+			invTransformCoord[1] =  0.5*h + (-p[0] * sin(rot) + p[1] * cos(rot)) / scal;
+			if (invTransformCoord[0] > 0 && invTransformCoord[1] > 0 && invTransformCoord[0] < w && invTransformCoord[1] < h)
+				return true;
+		} else {
+			if (coord[0] > 128 && coord[1] > 128 && coord[0] < 128 + 256 && coord[1] < 128 + 256) return true;
+		}
+		return false;
+	}
+
+	virtual void SetPosition(float time, const Vec2f& coord) {
+
+		pos.setDisplayValue(Vec2s(std::to_string(coord[0]), std::to_string(coord[1])));  // NEED TO CHECK WHY I DID ABOVE
+
+	}
+	virtual Vec2f GetPosition(float time) {
+		return pos.getDisplayValue(time);
+	}
+
+	virtual void SetScale(float time, float value) {
+		scale.setDisplayValue(Expr(std::to_string(value)));  // NEED TO CHECK WHY I DID ABOVE
+	}
+	virtual float GetScale(float time) {
+		return scale.getDisplayValue(time);
+	}
+		
+	mutable std::string lastFilename;
+	PositionProperty pos;
+	FloatProperty scale, rotation, opacity;
+	FilenameProperty filename;
+	mutable cairo_surface_t *image;
 };

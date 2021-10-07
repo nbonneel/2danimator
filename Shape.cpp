@@ -3,6 +3,7 @@
 #define NANOSVG_IMPLEMENTATION
 #include "nanosvg.h"
 
+
 void PolygonShape::BSplineSubdivide(float time) {
 	float s = GetScale(time);
 	float a = angle.getDisplayValue(time);
@@ -216,6 +217,9 @@ std::istream& operator>>(std::istream& is, Shape* &v) {
 	if (type == "Latex") {
 		v = new Latex();
 	}
+	if (type == "Image") {
+		v = new Image();
+	}
 	if (!v) {
 		std::cout << "invalid Shape" << std::endl;
 		return is;
@@ -223,3 +227,4 @@ std::istream& operator>>(std::istream& is, Shape* &v) {
 	is >> *v;
 	return is;
 }
+

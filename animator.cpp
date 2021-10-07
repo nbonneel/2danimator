@@ -180,6 +180,7 @@ void AnimatorPanel::addShape(wxCommandEvent& event) {
 	param->scene->Add(s);
 	scene->currentShape = s;
 	myApp->setupPanelProperties(scene->currentShape);
+	myApp->m_bookCtrl->AdvanceSelection();
 };
 
 void AnimatorPanel::update_time_values(wxCommandEvent& event) {
@@ -563,6 +564,8 @@ bool AnimatorApp::OnInit() {
 	panelObject_sizer->Add(addObjectButton("Point Set", new PointSet(Vec2s("200", "200"), "1", Vec3u(212, 61, 81)), panelObject, animatorPanel), 0, wxEXPAND);
 
 	panelObject_sizer->Add(addObjectButton("Latex", new Latex(Vec2s("200", "200"), "1", Vec3u(212, 61, 81)), panelObject, animatorPanel), 0, wxEXPAND);
+
+	panelObject_sizer->Add(addObjectButton("Image", new Image(Vec2s("200", "200"), "1"), panelObject, animatorPanel), 0, wxEXPAND);
 
 
 	panelObject->SetSizer(panelObject_sizer);
